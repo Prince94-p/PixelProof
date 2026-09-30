@@ -1,0 +1,92 @@
+{
+  "authentic_clean_jpeg": {
+    "status": "Low Suspicion",
+    "score": 11,
+    "ela_score": 2,
+    "ela_mean_diff": 0.17,
+    "copy_move_score": 8,
+    "copy_move_matches": 208,
+    "noise_score": 1,
+    "ml_available": false,
+    "ml_score_added": 0
+  },
+  "exact_copied_patch": {
+    "status": "Low Suspicion",
+    "score": 25,
+    "copy_move_score": 22,
+    "candidate_matches": 2880,
+    "verified_matches": 719,
+    "coherent_clusters": 31,
+    "dominant_cluster_size": 351,
+    "geometric_cluster_evidence": "Dominant cluster contains 351 verified pairs with mean displacement vector (379.8px, 0.1px) across distance 379.8px."
+  },
+  "textured_copied_patch": {
+    "status": "Review Recommended",
+    "score": 35,
+    "copy_move_score": 22,
+    "candidate_matches": 9528,
+    "verified_matches": 1133,
+    "coherent_clusters": 34,
+    "geometric_cluster_evidence": "Dominant cluster contains 857 verified pairs with mean displacement vector (399.8px, 160.1px) across distance 430.7px."
+  },
+  "repeated_natural_texture": {
+    "status": "Low Suspicion",
+    "score": 14,
+    "copy_move_score": 4,
+    "copy_move_status": "REPEATED NATURAL TEXTURE",
+    "candidate_matches": 12000,
+    "verified_matches": 4863,
+    "coherent_clusters": 366,
+    "geometric_cluster_evidence": "Dominant cluster contains 235 verified pairs with mean displacement vector (200.1px, 0.0px) across distance 200.1px."
+  },
+  "recompressed_clean_jpeg": {
+    "status": "Low Suspicion",
+    "score": 7,
+    "ela_score": 2,
+    "ela_status": "LOW VARIATION",
+    "ela_max_diff": 19.0,
+    "noise_score": 1
+  },
+  "png_image": {
+    "format": "PNG",
+    "status": "Low Suspicion",
+    "score": 24,
+    "ela_status": "LOW VARIATION",
+    "ela_score": 1,
+    "noise_score": 1
+  },
+  "localized_spliced_image": {
+    "status": "Review Recommended",
+    "score": 49,
+    "ela_score": 12,
+    "ela_status": "MODERATE VARIATION",
+    "noise_score": 15,
+    "noise_status": "STRONG LOCAL VARIATION"
+  },
+  "ml_detector_contract": {
+    "model_loaded": false,
+    "prediction_available": false,
+    "prediction": null,
+    "confidence": null,
+    "metadata_keys": [
+      "model_name",
+      "model_version",
+      "architecture",
+      "dataset_names",
+      "train_samples",
+      "validation_samples",
+      "test_samples",
+      "input_size",
+      "test_accuracy",
+      "precision",
+      "recall",
+      "f1_score",
+      "roc_auc",
+      "decision_threshold",
+      "model_hash_sha256",
+      "status",
+      "status_note"
+    ],
+    "explanation": "No trained ML model weights loaded. Forensics evaluated strictly via independent computer vision, frequency error-level, feature matching, and noise consistency algorithms."
+  }
+}

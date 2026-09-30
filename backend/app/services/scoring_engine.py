@@ -1,0 +1,170 @@
+from typing import Optional, Dict, Any
+
+def calculate_forensic_assessment(
+    file_result: dict,
+    metadata_result: dict,
+    ela_result: dict,
+    copy_move_result: dict,
+    noise_result: dict,
+    ml_result: Optional[dict] = None
+) -> dict:
+    """
+    Synthesizes independent forensic results into an initial evidence-weighted suspicion score (0-100),
+    confidence rating, and itemized explainable evidence list.
+    
+    IMPORTANT: Weights (15/30/30/20/5) and thresholds (0-29/30-59/60-100) are initial heuristic evidence
+    weights and are NOT described as dataset calibrated until real benchmark calibration is performed.
+    """
+    file_score = min(5, max(0, file_result.get("score", 0)))
+    meta_score = min(15, max(0, metadata_result.get("score", 0)))
+    ela_score = min(30, max(0, ela_result.get("score", 0)))
+    cm_score = min(30, max(0, copy_move_result.get("score", 0)))
+    noise_score = min(20, max(0, noise_result.get("score", 0)))
+
+    # Optional ML module support: if no trained model weights loaded, 0 points added
+    ml_score = 0
+    if ml_result and ml_result.get("available") is True:
+        # Placeholder for when trained model is integrated
+        ml_score = min(15, max(0, ml_result.get("score", 0)))
+
+    total_score = file_score + meta_score + ela_score + cm_score + noise_score + ml_score
+    total_score = max(0, min(100, int(round(total_score))))
+
+    # Determine status & color coding
+    if total_score >= 60:
+        status_label = "Strong Manipulation Indicators"
+        status_code = "danger"  # Red
+        summary = (
+            "Multiple distinct forensic indicators exhibit strong anomalies. "
+            "Corroborating traces across independent analyses suggest significant post-processing, cloning, or localized manipulation."
+        )
+    elif total_score >= 30:
+        status_label = "Review Recommended"
+        status_code = "warning"  # Amber
+        summary = (
+            "Several forensic indicators warrant closer inspection. "
+            "While natural factors like compression or repetitive patterns can cause minor divergence, "
+            "the detected traces justify manual review."
+        )
+    else:
+        status_label = "Low Suspicion"
+        status_code = "success"  # Green
+        summary = (
+            "Forensic analysis across metadata, recompression error levels, cloning vectors, and noise consistency "
+            "demonstrated uniform consistency with no strong indicators of digital manipulation."
+        )
+
+    # Calculate forensic confidence level (Low, Moderate, High)
+    # Based on evidence density, file size, format, and cross-module agreement
+    evidence_points = 0
+    anomalous_modules = sum([
+        1 if meta_score >= 8 else 0,
+        1 if ela_score >= 12 else 0,
+        1 if cm_score >= 10 else 0,
+        1 if noise_score >= 8 else 0,
+        1 if file_score >= 3 else 0,
+    ])
+
+    file_info = file_result.get("fingerprint", {})
+    pixel_count = file_info.get("width", 0) * file_info.get("height", 0)
+    has_exif = metadata_result.get("details", {}).get("has_exif", False)
+
+    if pixel_count >= 500000:
+        evidence_points += 1
+    if pixel_count >= 1500000:
+        evidence_points += 1
+    if has_exif:
+        evidence_points += 1
+    if anomalous_modules >= 2:
+        evidence_points += 2  # Cross-corroboration
+    elif anomalous_modules == 0 and pixel_count >= 800000:
+        evidence_points += 2  # Strong baseline consistency across large image
+
+    if evidence_points >= 4:
+        confidence = "High"
+        confidence_desc = "High confidence based on substantial pixel volume, independent cross-checks, and corroborated findings."
+    elif evidence_points >= 2:
+        confidence = "Moderate"
+        confidence_desc = "Moderate confidence based on standard evidence availability and typical recompression constraints."
+    else:
+        confidence = "Low"
+        confidence_desc = "Low confidence due to constrained image resolution or limited metadata context."
+
+    # Build explainable evidence breakdown list
+    evidence_list = [
+        {
+            "id": 1,
+            "module": "Metadata & EXIF Analysis",
+            "status": metadata_result.get("status", "UNAVAILABLE"),
+            "status_type": "danger" if meta_score >= 10 else ("warning" if meta_score > 0 else "success"),
+            "score": meta_score,
+            "max_score": 15,
+            "finding": metadata_result.get("finding", ""),
+            "explanation": metadata_result.get("explanation", ""),
+            "corroborated": meta_score >= 8 and (ela_score >= 12 or cm_score >= 10)
+        },
+        {
+            "id": 2,
+            "module": "Error Level Analysis (ELA)",
+            "status": ela_result.get("status", "LOW VARIATION"),
+            "status_type": "danger" if ela_score >= 20 else ("warning" if ela_score >= 10 else "success"),
+            "score": ela_score,
+            "max_score": 30,
+            "finding": ela_result.get("finding", ""),
+            "explanation": ela_result.get("explanation", ""),
+            "corroborated": ela_score >= 12 and (cm_score >= 10 or noise_score >= 8)
+        },
+        {
+            "id": 3,
+            "module": "Copy-Move Cloning Detection",
+            "status": copy_move_result.get("status", "NO DUPLICATED REGIONS DETECTED"),
+            "status_type": "danger" if cm_score >= 18 else ("warning" if cm_score >= 8 else "success"),
+            "score": cm_score,
+            "max_score": 30,
+            "finding": copy_move_result.get("finding", ""),
+            "explanation": copy_move_result.get("explanation", ""),
+            "corroborated": cm_score >= 10 and (ela_score >= 12)
+        },
+        {
+            "id": 4,
+            "module": "Noise Consistency Analysis",
+            "status": noise_result.get("status", "MOSTLY CONSISTENT"),
+            "status_type": "danger" if noise_score >= 14 else ("warning" if noise_score >= 8 else "success"),
+            "score": noise_score,
+            "max_score": 20,
+            "finding": noise_result.get("finding", ""),
+            "explanation": noise_result.get("explanation", ""),
+            "corroborated": noise_score >= 8 and (ela_score >= 12)
+        },
+        {
+            "id": 5,
+            "module": "File Integrity & Container Verification",
+            "status": file_result.get("status", "VALID"),
+            "status_type": "danger" if file_score >= 4 else "success",
+            "score": file_score,
+            "max_score": 5,
+            "finding": file_result.get("finding", ""),
+            "explanation": file_result.get("explanation", ""),
+            "corroborated": False
+        }
+    ]
+
+    return {
+        "score": total_score,
+        "max_score": 100,
+        "status": status_label,
+        "status_code": status_code,
+        "confidence": confidence,
+        "confidence_description": confidence_desc,
+        "summary": summary,
+        "disclaimer": "This score represents the strength of detected forensic indicators based on initial evidence weights (15/30/30/20/5). It is not the probability that the image is fake.",
+        "breakdown": {
+            "metadata": {"score": meta_score, "max": 15},
+            "ela": {"score": ela_score, "max": 30},
+            "copy_move": {"score": cm_score, "max": 30},
+            "noise": {"score": noise_score, "max": 20},
+            "file_integrity": {"score": file_score, "max": 5},
+            "total": {"score": total_score, "max": 100}
+        },
+        "evidence": evidence_list
+    }

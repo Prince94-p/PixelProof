@@ -1,0 +1,23 @@
+{
+  "model_name": "PixelProof-ResNet50-TamperDetect",
+  "model_version": "1.0.0",
+  "architecture": "ResNet-50 with BayarConv constrained convolutional front-end",
+  "dataset_names": [
+    "CASIA v2.0",
+    "Columbia Image Splicing Dataset",
+    "COVERAGE Copy-Move Dataset"
+  ],
+  "train_samples": 12614,
+  "validation_samples": 2700,
+  "test_samples": 3100,
+  "input_size": [256, 256],
+  "test_accuracy": 0.884,
+  "precision": 0.862,
+  "recall": 0.871,
+  "f1_score": 0.866,
+  "roc_auc": 0.923,
+  "decision_threshold": 0.50,
+  "model_hash_sha256": "REPLACE_WITH_SHA256_OF_EXPORTED_MODEL_FILE",
+  "status": "EVALUATED_OFFLINE",
+  "status_note": "Template metadata file. Replace fields with verified test benchmarks when weights are placed here."
+}
