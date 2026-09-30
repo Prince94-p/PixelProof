@@ -1,5 +1,51 @@
 from typing import Optional, Dict, Any
 
+def check_evidence_disagreement(score: int, status: str, ml_result: Optional[dict]) -> dict:
+    """
+    Evaluates whether the independent ML classification signal and classical forensic
+    evidence disagree, providing contextual explanation for manual review without
+    altering the classical forensic score or verdict.
+    """
+    if not ml_result or not ml_result.get("available") or not ml_result.get("prediction"):
+        return {
+            "has_disagreement": False,
+            "title": None,
+            "message": None,
+        }
+
+    ml_pred = ml_result.get("prediction")
+    has_disagreement = False
+    message = ""
+
+    if ml_pred == "manipulated" and (score < 30 or status == "Low Suspicion"):
+        has_disagreement = True
+        message = (
+            "The ML classifier detected manipulation-associated visual patterns, "
+            "while classical forensic modules found limited direct manipulation evidence. "
+            "Manual review is recommended when independent signals disagree."
+        )
+    elif ml_pred == "authentic" and (score >= 60 or status == "Strong Manipulation Indicators"):
+        has_disagreement = True
+        message = (
+            "Classical forensic modules detected strong manipulation indicators, "
+            "while the ML classifier produced an authenticity-leaning visual pattern signal. "
+            "Manual review is recommended when independent signals disagree."
+        )
+    elif ml_pred == "authentic" and score >= 30:
+        has_disagreement = True
+        message = (
+            "Classical forensic modules identified indicators warranting review, "
+            "while the ML classifier produced an authenticity-leaning visual pattern signal. "
+            "Manual review is recommended when independent signals disagree."
+        )
+
+    return {
+        "has_disagreement": has_disagreement,
+        "title": "EVIDENCE DISAGREEMENT" if has_disagreement else None,
+        "message": message if has_disagreement else None,
+    }
+
+
 def calculate_forensic_assessment(
     file_result: dict,
     metadata_result: dict,
@@ -14,6 +60,8 @@ def calculate_forensic_assessment(
     
     IMPORTANT: Weights (15/30/30/20/5) and thresholds (0-29/30-59/60-100) are initial heuristic evidence
     weights and are NOT described as dataset calibrated until real benchmark calibration is performed.
+
+    The ML classifier output is an independent signal and is NEVER added directly into the 0-100 forensic score.
     """
     file_score = min(5, max(0, file_result.get("score", 0)))
     meta_score = min(15, max(0, metadata_result.get("score", 0)))
@@ -21,13 +69,9 @@ def calculate_forensic_assessment(
     cm_score = min(30, max(0, copy_move_result.get("score", 0)))
     noise_score = min(20, max(0, noise_result.get("score", 0)))
 
-    # Optional ML module support: if no trained model weights loaded, 0 points added
-    ml_score = 0
-    if ml_result and ml_result.get("available") is True:
-        # Placeholder for when trained model is integrated
-        ml_score = min(15, max(0, ml_result.get("score", 0)))
-
-    total_score = file_score + meta_score + ela_score + cm_score + noise_score + ml_score
+    # Primary Forensic Suspicion Score stays strictly composed of the 5 classical forensic modules:
+    # Metadata (15) + ELA (30) + Copy-Move (30) + Noise (20) + File Integrity (5) = 100 max
+    total_score = file_score + meta_score + ela_score + cm_score + noise_score
     total_score = max(0, min(100, int(round(total_score))))
 
     # Determine status & color coding
@@ -149,6 +193,8 @@ def calculate_forensic_assessment(
         }
     ]
 
+    disagreement = check_evidence_disagreement(total_score, status_label, ml_result)
+
     return {
         "score": total_score,
         "max_score": 100,
@@ -166,5 +212,6 @@ def calculate_forensic_assessment(
             "file_integrity": {"score": file_score, "max": 5},
             "total": {"score": total_score, "max": 100}
         },
-        "evidence": evidence_list
+        "evidence": evidence_list,
+        "evidence_disagreement": disagreement
     }

@@ -111,17 +111,21 @@ async def analyze_image_endpoint(file: UploadFile = File(...)):
             "visualization": ""
         }
 
-    # 8. Optional ML Tampering Detector
+    # 8. Optional ML Tampering Detector (EfficientNet-B0)
     try:
         ml_result = ml_detector.predict(pil_rgb, cv_bgr)
     except Exception as e:
         ml_result = {
             "available": False,
             "prediction": None,
+            "authentic_probability": None,
+            "manipulated_probability": None,
             "confidence": None,
-            "threshold": None,
-            "model_version": None,
+            "model": "EfficientNet-B0",
+            "model_version": "pixelproof-casia-v1",
             "explanation": f"ML model inference failed: {str(e)}",
+            "disclaimer": "ML classification failed for this image.",
+            "metrics": {},
             "metadata": ml_detector.get_metadata()
         }
 
@@ -171,11 +175,23 @@ async def analyze_image_endpoint(file: UploadFile = File(...)):
         "ml_analysis": {
             "available": ml_result.get("available", False),
             "prediction": ml_result.get("prediction"),
+            "signal_label": ml_result.get(
+                "signal_label",
+                "Manipulation-Leaning ML Signal" if ml_result.get("prediction") == "manipulated"
+                else ("Authenticity-Leaning ML Signal" if ml_result.get("prediction") == "authentic" else None)
+            ),
+            "authentic_probability": ml_result.get("authentic_probability"),
+            "manipulated_probability": ml_result.get("manipulated_probability"),
             "confidence": ml_result.get("confidence"),
-            "threshold": ml_result.get("threshold"),
-            "model_version": ml_result.get("model_version"),
+            "model": ml_result.get("model", "EfficientNet-B0"),
+            "model_version": ml_result.get("model_version", "pixelproof-casia-v1"),
+            "signal_type": ml_result.get("signal_type", "Independent ML Signal"),
             "explanation": ml_result.get("explanation"),
-            "metadata": ml_result.get("metadata", {})
+            "disclaimer": ml_result.get("disclaimer", "This is an independent machine-learning signal, not the final forensic conclusion."),
+            "disagreement": assessment.get("evidence_disagreement", {"has_disagreement": False, "title": None, "message": None}),
+            "score_added": 0,
+            "metrics": ml_result.get("metrics", {}),
+            "metadata": ml_detector.get_metadata()
         },
         "evidence": assessment["evidence"],
         "original_preview": original_preview_uri

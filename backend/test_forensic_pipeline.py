@@ -11,7 +11,10 @@ from app.main import health_check
 def test_health():
     print("Testing health check ...")
     res = health_check()
-    assert res == {"status": "ok", "service": "PixelProof Forensics"}
+    assert res["status"] == "ok"
+    assert res["service"] == "PixelProof Forensics"
+    assert "ml_model" in res
+    assert res["ml_model"]["model"] == "EfficientNet-B0"
     print("✓ Health check passed!")
 
 def test_normal_jpeg():

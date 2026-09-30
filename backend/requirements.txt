@@ -4,3 +4,7 @@ python-multipart>=0.0.9
 pillow>=10.4.0
 numpy>=2.0.0
 opencv-python-headless>=4.10.0.84
+
+# --- Deep Learning Model Support (EfficientNet-B0) ---
+torch>=2.0.0
+torchvision>=0.15.0

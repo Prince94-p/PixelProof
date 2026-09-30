@@ -33,5 +33,14 @@ app.include_router(analysis_router)
 
 @app.get("/api/health")
 def health_check():
-    """Service health check endpoint."""
-    return {"status": "ok", "service": "PixelProof Forensics"}
+    """Service health check endpoint with ML model status."""
+    from app.services.ml_detector import ml_detector
+    return {
+        "status": "ok",
+        "service": "PixelProof Forensics",
+        "ml_model": {
+            "available": ml_detector.is_available(),
+            "model": "EfficientNet-B0",
+            "model_version": "pixelproof-casia-v1"
+        }
+    }

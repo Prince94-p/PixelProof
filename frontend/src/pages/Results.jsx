@@ -4,6 +4,7 @@ import ForensicViewer from '../components/ForensicViewer';
 import EvidenceCard from '../components/EvidenceCard';
 import MetadataPanel from '../components/MetadataPanel';
 import DigitalFingerprint from '../components/DigitalFingerprint';
+import MLClassificationCard from '../components/MLClassificationCard';
 import { ArrowLeft, RefreshCw, Download, FileText, CheckCircle2 } from 'lucide-react';
 
 export default function Results({ analysisData, onReset }) {
@@ -18,7 +19,7 @@ export default function Results({ analysisData, onReset }) {
     );
   }
 
-  const { file, result, metadata, ela, copy_move, noise, file_integrity, evidence, original_preview } = analysisData;
+  const { file, result, metadata, ela, copy_move, noise, file_integrity, evidence, original_preview, ml_analysis } = analysisData;
   const breakdown = result.breakdown || {};
 
   return (
@@ -105,7 +106,16 @@ export default function Results({ analysisData, onReset }) {
           />
         </div>
 
-        {/* 2. Visual Forensics Viewer */}
+        {/* 2. Deep Learning ML Classification Signal (EfficientNet-B0) */}
+        {ml_analysis?.available && (
+          <MLClassificationCard
+            mlAnalysis={ml_analysis}
+            forensicScore={result?.score}
+            forensicStatus={result?.status}
+          />
+        )}
+
+        {/* 3. Visual Forensics Viewer */}
         <ForensicViewer
           originalImage={original_preview}
           ela={ela}
