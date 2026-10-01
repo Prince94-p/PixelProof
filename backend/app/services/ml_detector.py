@@ -211,6 +211,15 @@ class MLDetectorService:
             # Build architecture and load state_dict
             model = self._build_model()
             model.load_state_dict(state_dict)
+            del raw, state_dict  # Immediately release raw deserialized state_dict from memory
+            
+            # On CPU, constrain thread pool to prevent excessive OpenMP thread stack memory
+            if self._device.type == "cpu":
+                try:
+                    torch.set_num_threads(1)
+                except Exception:
+                    pass
+
             model = model.to(self._device)
             model.eval()
 
@@ -218,6 +227,9 @@ class MLDetectorService:
             self.weights_path = weights_path
             self._build_transform()
             self.load_error = None
+
+            import gc
+            gc.collect()  # Flush startup loading objects
 
             self.metadata["model_hash_sha256"] = weights_sha256
             self.metadata["device"] = str(self._device)
@@ -317,8 +329,8 @@ class MLDetectorService:
             # Preprocess: Resize(224x224) -> ToTensor() -> Normalize(ImageNet)
             tensor = self._transform(img).unsqueeze(0).to(self._device)
 
-            # 2. Forward pass with no_grad
-            with torch.no_grad():
+            # 2. Forward pass with inference_mode (no gradients, minimal memory)
+            with torch.inference_mode():
                 try:
                     logits = self.model(tensor)
                 except Exception as run_err:
@@ -333,9 +345,11 @@ class MLDetectorService:
                         raise run_err
 
                 probs = torch.softmax(logits, dim=1)[0]
+                auth_prob = round(float(probs[0].item()), 4)
+                manip_prob = round(float(probs[1].item()), 4)
 
-            auth_prob = round(float(probs[0].item()), 4)
-            manip_prob = round(float(probs[1].item()), 4)
+            # Explicitly release prediction tensors
+            del logits, probs, tensor
 
             # argmax class 0 => authentic, argmax class 1 => manipulated
             if manip_prob > auth_prob:
