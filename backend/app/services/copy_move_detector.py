@@ -31,6 +31,7 @@ def detect_copy_move(cv_bgr: np.ndarray, cv_gray: np.ndarray) -> dict:
     
     if keypoints is None or descriptors is None or len(keypoints) < 15:
         vis_empty = encode_cv2_to_base64_data_uri(vis, "png")
+        del vis
         return {
             "score": 0,
             "max_score": max_score,
@@ -394,6 +395,7 @@ def detect_copy_move(cv_bgr: np.ndarray, cv_gray: np.ndarray) -> dict:
 
     score = min(max_score, max(0, score))
     vis_data_uri = encode_cv2_to_base64_data_uri(vis, "png")
+    del vis
 
     return {
         "score": score,
