@@ -1,3 +1,5 @@
+--extra-index-url https://download.pytorch.org/whl/cpu
+
 fastapi>=0.115.0
 uvicorn>=0.30.0
 python-multipart>=0.0.9
@@ -5,6 +7,6 @@ pillow>=10.4.0
 numpy>=2.0.0
 opencv-python-headless>=4.10.0.84
 
-# --- Deep Learning Model Support (EfficientNet-B0) ---
+# --- Deep Learning Model Support (EfficientNet-B0 CPU) ---
 torch>=2.0.0
 torchvision>=0.15.0
