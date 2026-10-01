@@ -21,12 +21,17 @@ def analyze_ela(rgb_img: Image.Image, cv_bgr: np.ndarray, file_format: str) -> d
     recompressed_pil = Image.open(buffer)
     recompressed_rgb = np.array(recompressed_pil)
     recompressed_bgr = cv2.cvtColor(recompressed_rgb, cv2.COLOR_RGB2BGR)
+    buffer.close()
+    del buffer
+    del recompressed_pil
+    del recompressed_rgb
     
-    # Step 3: Compute pixel-wise absolute difference
-    diff = cv2.absdiff(cv_bgr, recompressed_bgr).astype(np.float32)
+    # Step 3: Compute pixel-wise absolute difference (keep in uint8)
+    diff = cv2.absdiff(cv_bgr, recompressed_bgr)
+    del recompressed_bgr
     
     # Step 4: Convert difference to grayscale for statistical analysis
-    gray_diff = cv2.cvtColor(diff.astype(np.uint8), cv2.COLOR_BGR2GRAY)
+    gray_diff = cv2.cvtColor(diff, cv2.COLOR_BGR2GRAY)
     
     # Global metrics
     global_mean = float(np.mean(gray_diff))
@@ -34,17 +39,15 @@ def analyze_ela(rgb_img: Image.Image, cv_bgr: np.ndarray, file_format: str) -> d
     max_diff = float(np.max(gray_diff))
     
     # Step 5: Adaptive scaling for visual display
-    # Scale differences so human eyes can clearly inspect compression levels
     scale_factor = 12.0
     if max_diff > 0:
-        # Prevent extreme blow-out while amplifying subtle recompression traces
         scale_factor = min(20.0, max(8.0, 220.0 / max(max_diff, 1.0)))
     
-    visual_ela = np.clip(diff * scale_factor, 0, 255).astype(np.uint8)
+    # cv2.convertScaleAbs avoids float64/float32 intermediate allocation
+    visual_ela = cv2.convertScaleAbs(diff, alpha=scale_factor)
+    del diff
     
     # Step 6: Block-based localized anomaly analysis
-    # High-contrast edges naturally show higher DCT recompression error.
-    # We detect local patches that strongly deviate from surrounding context.
     block_size = max(16, min(48, min(h, w) // 16))
     blocks_y = h // block_size
     blocks_x = w // block_size
@@ -67,16 +70,29 @@ def analyze_ela(rgb_img: Image.Image, cv_bgr: np.ndarray, file_format: str) -> d
     block_means = np.array(block_means)
     bm_mean = float(np.mean(block_means))
     bm_std = float(np.std(block_means))
+    del block_means
     
     if bm_std > 0.4:
         # Require both statistical outlier (Z-score > 2.4) AND meaningful absolute error delta (> 3.0)
-        abs_diffs = block_means - bm_mean
-        z_scores = abs_diffs / bm_std
-        anomalous_blocks = int(np.sum((z_scores > 2.4) & (abs_diffs > 3.0)))
+        abs_diffs = block_means_diff = None
+        # Compute without large temporary arrays
+        z_thresh = bm_mean + 2.4 * bm_std
+        anomalous_blocks = 0
+        for by in range(blocks_y):
+            for bx in range(blocks_x):
+                y1 = by * block_size
+                y2 = y1 + block_size
+                x1 = bx * block_size
+                x2 = x1 + block_size
+                val = float(np.mean(gray_diff[y1:y2, x1:x2]))
+                if val > z_thresh and (val - bm_mean) > 3.0:
+                    anomalous_blocks += 1
         anomaly_ratio = anomalous_blocks / total_blocks
     else:
         anomalous_blocks = 0
         anomaly_ratio = 0.0
+
+    del gray_diff
 
     # Format-aware adjustments
     is_jpeg = file_format.upper() in ("JPEG", "JPG")
@@ -103,6 +119,18 @@ def analyze_ela(rgb_img: Image.Image, cv_bgr: np.ndarray, file_format: str) -> d
         except Exception:
             pass
 
+    # Use thumbnail for quality sweep to avoid multiple full-res JPEG re-encodes
+    sweep_max = 512
+    if max(h, w) > sweep_max:
+        scale_q = sweep_max / float(max(h, w))
+        qw = max(32, int(w * scale_q))
+        qh = max(32, int(h * scale_q))
+        sweep_pil = rgb_img.resize((qw, qh), Image.Resampling.BILINEAR)
+        sweep_bgr = cv2.resize(cv_bgr, (qw, qh), interpolation=cv2.INTER_AREA)
+    else:
+        sweep_pil = rgb_img
+        sweep_bgr = cv_bgr
+
     # Small bounded quality sweep: [75, 85, 90, 95]
     quality_tests = []
     for test_q in (75, 85, 90, 95):
@@ -115,19 +143,31 @@ def analyze_ela(rgb_img: Image.Image, cv_bgr: np.ndarray, file_format: str) -> d
         else:
             try:
                 buf_q = io.BytesIO()
-                rgb_img.save(buf_q, format="JPEG", quality=test_q)
+                sweep_pil.save(buf_q, format="JPEG", quality=test_q)
                 buf_q.seek(0)
-                recomp_q = np.array(Image.open(buf_q))
+                recomp_pil = Image.open(buf_q)
+                recomp_q = np.array(recomp_pil)
+                buf_q.close()
+                del buf_q, recomp_pil
                 recomp_bgr_q = cv2.cvtColor(recomp_q, cv2.COLOR_RGB2BGR)
-                diff_q = cv2.absdiff(cv_bgr, recomp_bgr_q)
+                del recomp_q
+                diff_q = cv2.absdiff(sweep_bgr, recomp_bgr_q)
+                del recomp_bgr_q
                 gray_q = cv2.cvtColor(diff_q, cv2.COLOR_BGR2GRAY)
+                del diff_q
                 quality_tests.append({
                     "quality": test_q,
                     "mean_error": round(float(np.mean(gray_q)), 2),
                     "max_diff": round(float(np.max(gray_q)), 1)
                 })
+                del gray_q
             except Exception:
                 pass
+
+    if sweep_pil is not rgb_img:
+        del sweep_pil
+    if sweep_bgr is not cv_bgr:
+        del sweep_bgr
 
     reliability = "standard" if is_jpeg else "limited"
     reliability_note = (
@@ -174,6 +214,7 @@ def analyze_ela(rgb_img: Image.Image, cv_bgr: np.ndarray, file_format: str) -> d
 
     # Encode ELA visualization
     vis_data_uri = encode_cv2_to_base64_data_uri(visual_ela, "png")
+    del visual_ela
 
     return {
         "score": score,
