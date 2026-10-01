@@ -70,13 +70,25 @@ class MLDetectorService:
     PRIMARY_WEIGHTS_FILE = "image_forensics_model.pth"
 
     def __init__(self):
-        self.model = None
+        self._model = None
         self.weights_path: Optional[str] = None
         self._transform = None
         self._device = None
         self.load_error: Optional[str] = None
+        self._load_attempted: bool = False
         self.metadata: Dict[str, Any] = self._default_metadata()
-        self._initialize()
+        # Note: Model loading is intentionally deferred to avoid blocking startup or port binding.
+
+    @property
+    def model(self):
+        """Lazy model property: loads EfficientNet-B0 on first demand if not yet loaded."""
+        if self._model is None and not self._load_attempted and self.load_error is None:
+            self.ensure_loaded()
+        return self._model
+
+    @model.setter
+    def model(self, val):
+        self._model = val
 
     def _default_metadata(self) -> Dict[str, Any]:
         """Returns standard metadata schema with real held-out metrics."""
@@ -93,28 +105,57 @@ class MLDetectorService:
             "model_hash_sha256": None,
             "device": None,
             "status": "UNLOADED",
-            "status_note": "Awaiting initialization.",
+            "status_note": "Awaiting on-demand initialization.",
         }
 
-    def _initialize(self):
-        """Locates and loads weights on startup."""
+    def _find_weights_path(self) -> Optional[str]:
+        """Locates candidate weights file on disk without performing any model loading."""
         candidate = os.environ.get(self.DEFAULT_WEIGHTS_ENV)
-        if not candidate and os.path.exists(self.DEFAULT_MODEL_DIR):
+        if candidate and os.path.isfile(candidate):
+            return candidate
+        if os.path.exists(self.DEFAULT_MODEL_DIR):
             primary = os.path.join(self.DEFAULT_MODEL_DIR, self.PRIMARY_WEIGHTS_FILE)
             if os.path.isfile(primary):
-                candidate = primary
-            else:
-                for fname in sorted(os.listdir(self.DEFAULT_MODEL_DIR)):
-                    if fname.endswith((".pth", ".pt")):
-                        candidate = os.path.join(self.DEFAULT_MODEL_DIR, fname)
-                        break
+                return primary
+            for fname in sorted(os.listdir(self.DEFAULT_MODEL_DIR)):
+                if fname.endswith((".pth", ".pt")):
+                    cand = os.path.join(self.DEFAULT_MODEL_DIR, fname)
+                    if os.path.isfile(cand):
+                        return cand
+        return None
 
+    def is_available(self) -> bool:
+        """
+        Returns True if the PyTorch model is loaded or ready for on-demand lazy inference.
+        Fast non-blocking check: does NOT import PyTorch or load weights into RAM,
+        allowing /api/health and FastAPI startup to bind to the port immediately.
+        """
+        if self._model is not None:
+            return True
+        if self.load_error is not None:
+            return False
+        path = self._find_weights_path()
+        return path is not None and os.path.isfile(path)
+
+    def ensure_loaded(self) -> bool:
+        """
+        Lazily loads weights and builds the singleton EfficientNet-B0 model on first demand.
+        Caches the model so all subsequent analyses reuse the same instance.
+        """
+        if self._model is not None:
+            return True
+        if self.load_error is not None:
+            return False
+
+        self._load_attempted = True
+        candidate = self._find_weights_path()
         if candidate and os.path.isfile(candidate):
-            self.load_weights(candidate)
+            return self.load_weights(candidate)
         else:
             self.load_error = f"Model weights file not found in {self.DEFAULT_MODEL_DIR}"
             self.metadata["status"] = "NOT_FOUND"
             self.metadata["status_note"] = self.load_error
+            return False
 
     @staticmethod
     def _build_model():
@@ -142,10 +183,6 @@ class MLDetectorService:
             transforms.ToTensor(),
             transforms.Normalize(mean=IMAGENET_MEAN, std=IMAGENET_STD),
         ])
-
-    def is_available(self) -> bool:
-        """Returns True if the PyTorch model is loaded and ready for inference."""
-        return self.model is not None
 
     def get_metadata(self) -> Dict[str, Any]:
         """Returns model specification, training provenance, and honest test metrics."""
@@ -281,7 +318,7 @@ class MLDetectorService:
           - explanation: signal explanation
           - disclaimer: honest probabilistic notice
         """
-        if not self.is_available():
+        if not self.ensure_loaded():
             return {
                 "available": False,
                 "prediction": None,
@@ -429,12 +466,12 @@ class MLDetectorService:
         - Gracefully degrades with an honest reason on any memory pressure or execution error.
         Does NOT alter model weights or inference probabilities.
         """
-        if not self.is_available():
+        if not self.ensure_loaded():
             return {
                 "available": False,
                 "target_class": None,
                 "visualization": None,
-                "explanation": "Grad-CAM unavailable because ML model is not loaded."
+                "explanation": self.load_error or "Grad-CAM unavailable because ML model is not loaded."
             }
 
         handle_f = None
