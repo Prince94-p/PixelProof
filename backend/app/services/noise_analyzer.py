@@ -16,6 +16,7 @@ def analyze_noise_consistency(cv_bgr: np.ndarray, cv_gray: np.ndarray) -> dict:
     # Subtracting Gaussian blur isolates fine sensor noise grain from underlying textures
     blur = cv2.GaussianBlur(gray_f, (5, 5), 1.0)
     residual = gray_f - blur
+    del gray_f, blur  # Free immediately
     
     # 2. Block-based noise variance analysis
     block_size = max(24, min(48, min(h, w) // 16))
@@ -28,6 +29,7 @@ def analyze_noise_consistency(cv_bgr: np.ndarray, cv_gray: np.ndarray) -> dict:
     sobelx = cv2.Sobel(cv_gray, cv2.CV_32F, 1, 0, ksize=3)
     sobely = cv2.Sobel(cv_gray, cv2.CV_32F, 0, 1, ksize=3)
     edge_mag = cv2.magnitude(sobelx, sobely)
+    del sobelx, sobely  # Free intermediate directional gradients immediately
     edge_thresh = np.percentile(edge_mag, 70)
     
     block_noises = []
@@ -57,40 +59,57 @@ def analyze_noise_consistency(cv_bgr: np.ndarray, cv_gray: np.ndarray) -> dict:
             noise_grid[by, bx] = sigma_est
             block_noises.append(sigma_est)
 
+    del residual, edge_mag  # Large 2D arrays no longer needed
     block_noises = np.array(block_noises)
     global_median_noise = float(np.median(block_noises))
     noise_iqr = float(np.percentile(block_noises, 75) - np.percentile(block_noises, 25))
     noise_cv = float(noise_iqr / (global_median_noise + 1e-4))  # Coefficient of quartile dispersion
     
     # 3. Detect Outliers (abnormally noisy or abnormally flat blocks)
-    # Require both quartile dispersion AND minimum absolute noise disparity to prevent false positives on subtle texture variations
     min_abs_delta = max(1.8 * noise_iqr, 1.2)
     abs_noise_diff = np.abs(block_noises - global_median_noise)
     outlier_count = int(np.sum(abs_noise_diff > min_abs_delta))
     total_blocks = len(block_noises)
     outlier_ratio = outlier_count / max(1, total_blocks)
+    del abs_noise_diff
 
     # 4. Generate Professional Forensic Heatmap with Robust Absolute Reference
-    # Avoid relative stretching that makes micro-variations on clean images appear as false-positive hot spots
     min_ref_span = 2.5
     ref_min = max(0.0, global_median_noise - max(min_ref_span * 0.4, 2.5 * noise_iqr))
     ref_max = max(ref_min + min_ref_span, global_median_noise + max(min_ref_span * 0.6, 3.5 * noise_iqr))
     
     # Clip to robust reference bounds
     clipped_grid = np.clip(noise_grid, ref_min, ref_max)
+    del noise_grid
     norm_grid = ((clipped_grid - ref_min) / (ref_max - ref_min) * 255.0).astype(np.uint8)
+    del clipped_grid
     
-    # Resize up to image dimensions with smooth bicubic interpolation
-    heatmap_resized = cv2.resize(norm_grid, (w, h), interpolation=cv2.INTER_CUBIC)
+    # Bound heatmap rendering resolution to max 1280px to prevent large temporary canvases
+    max_render_dim = 1280
+    if max(w, h) > max_render_dim:
+        scale_v = max_render_dim / float(max(w, h))
+        target_w = max(16, int(round(w * scale_v)))
+        target_h = max(16, int(round(h * scale_v)))
+        heatmap_resized = cv2.resize(norm_grid, (target_w, target_h), interpolation=cv2.INTER_CUBIC)
+        gray_for_overlay = cv2.resize(cv_gray, (target_w, target_h), interpolation=cv2.INTER_AREA)
+    else:
+        heatmap_resized = cv2.resize(norm_grid, (w, h), interpolation=cv2.INTER_CUBIC)
+        gray_for_overlay = cv_gray
+    del norm_grid
     
     # Apply scientific colormap (COLORMAP_CIVIDIS is perceptually uniform and colorblind safe)
     colored_heatmap = cv2.applyColorMap(heatmap_resized, cv2.COLORMAP_CIVIDIS)
+    del heatmap_resized
     
     # Blend with grayscale background (45% background, 55% heatmap)
-    gray_bgr = cv2.cvtColor(cv_gray, cv2.COLOR_GRAY2BGR)
+    gray_bgr = cv2.cvtColor(gray_for_overlay, cv2.COLOR_GRAY2BGR)
+    if gray_for_overlay is not cv_gray:
+        del gray_for_overlay
     overlay = cv2.addWeighted(gray_bgr, 0.45, colored_heatmap, 0.55, 0)
+    del gray_bgr, colored_heatmap
     
     vis_data_uri = encode_cv2_to_base64_data_uri(overlay, "png")
+    del overlay
 
     # 5. Status & Initial Evidence Weight
     # If the image is extremely clean (noise floor is near 0, e.g. synthetic flat vector), dispersion is negligible
