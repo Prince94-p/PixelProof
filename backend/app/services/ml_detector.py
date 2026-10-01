@@ -363,7 +363,7 @@ class MLDetectorService:
                 confidence = auth_prob
                 explanation = "Model detected visual patterns more consistent with authentic imagery."
 
-            # 3. Optional Grad-CAM Influence Map Generation
+            # 3. Memory-safe Grad-CAM Influence Map Generation
             gradcam_res = self.generate_gradcam(
                 img,
                 target_class_idx=1 if manip_prob > auth_prob else 0
@@ -421,6 +421,12 @@ class MLDetectorService:
     ) -> Dict[str, Any]:
         """
         Computes Grad-CAM model influence visualization on EfficientNet-B0's final feature layer.
+        Memory-safe implementation:
+        - Uses the SAME EfficientNet model instance.
+        - Hooks are registered and strictly removed in a finally block.
+        - Parameter gradients are wiped with zero_grad(set_to_none=True).
+        - Computes overlay at display thumbnail resolution (<= 640px) to prevent array explosion.
+        - Gracefully degrades with an honest reason on any memory pressure or execution error.
         Does NOT alter model weights or inference probabilities.
         """
         if not self.is_available():
@@ -431,6 +437,8 @@ class MLDetectorService:
                 "explanation": "Grad-CAM unavailable because ML model is not loaded."
             }
 
+        handle_f = None
+        handle_b = None
         try:
             import torch
             import cv2
@@ -454,7 +462,7 @@ class MLDetectorService:
             tensor = self._transform(img_pil.convert("RGB")).unsqueeze(0).to(self._device)
             tensor.requires_grad_(True)
 
-            model.zero_grad()
+            model.zero_grad(set_to_none=True)
             logits = model(tensor)
             probs = torch.softmax(logits, dim=1)[0]
 
@@ -464,8 +472,13 @@ class MLDetectorService:
             score = logits[0, target_class_idx]
             score.backward()
 
-            handle_f.remove()
-            handle_b.remove()
+            # Clean up hooks immediately
+            if handle_f is not None:
+                handle_f.remove()
+                handle_f = None
+            if handle_b is not None:
+                handle_b.remove()
+                handle_b = None
 
             if not activations or not gradients:
                 return {
@@ -475,30 +488,59 @@ class MLDetectorService:
                     "explanation": "Feature activations could not be extracted for Grad-CAM."
                 }
 
-            act = activations[0].detach()   # [1, 1280, 7, 7]
+            act = activations[0].detach()    # [1, 1280, 7, 7]
             grad = gradients[0].detach()     # [1, 1280, 7, 7]
+            del activations, gradients
 
             weights = torch.mean(grad, dim=(2, 3), keepdim=True)  # [1, 1280, 1, 1]
+            del grad
             cam = torch.sum(weights * act, dim=1, keepdim=True)    # [1, 1, 7, 7]
+            del weights, act
             cam = torch.relu(cam)
 
             cam_np = cam[0, 0].cpu().numpy()
+            del cam, logits, probs, tensor
+            
+            # Wiping parameter gradients frees all cached autograd graph and parameter .grad tensors
+            model.zero_grad(set_to_none=True)
+
             max_c = float(np.max(cam_np))
             min_c = float(np.min(cam_np))
             if max_c > min_c:
                 cam_norm = ((cam_np - min_c) / (max_c - min_c) * 255.0).astype(np.uint8)
             else:
                 cam_norm = np.zeros_like(cam_np, dtype=np.uint8)
+            del cam_np
 
-            # Resize CAM to match original image size for display
+            # Memory optimization: Grad-CAM spatial resolution is 7x7.
+            # Render overlay at thumbnail resolution (max 640px) to prevent 45 MB uncompressed arrays.
             orig_w, orig_h = img_pil.size
-            cam_resized = cv2.resize(cam_norm, (orig_w, orig_h), interpolation=cv2.INTER_CUBIC)
+            max_overlay_dim = 640
+            if max(orig_w, orig_h) > max_overlay_dim:
+                scale_d = max_overlay_dim / float(max(orig_w, orig_h))
+                disp_w = max(16, int(round(orig_w * scale_d)))
+                disp_h = max(16, int(round(orig_h * scale_d)))
+                disp_pil = img_pil.resize((disp_w, disp_h), Image.Resampling.BILINEAR)
+            else:
+                disp_w, disp_h = orig_w, orig_h
+                disp_pil = img_pil
+
+            cam_resized = cv2.resize(cam_norm, (disp_w, disp_h), interpolation=cv2.INTER_CUBIC)
+            del cam_norm
             heatmap = cv2.applyColorMap(cam_resized, cv2.COLORMAP_JET)
+            del cam_resized
 
-            orig_bgr = cv2.cvtColor(np.array(img_pil.convert("RGB")), cv2.COLOR_RGB2BGR)
-            cam_overlay = cv2.addWeighted(orig_bgr, 0.55, heatmap, 0.45, 0)
+            disp_rgb = np.array(disp_pil.convert("RGB"))
+            if disp_pil is not img_pil:
+                del disp_pil
+            disp_bgr = cv2.cvtColor(disp_rgb, cv2.COLOR_RGB2BGR)
+            del disp_rgb
 
-            vis_uri = encode_cv2_to_base64_data_uri(cam_overlay, "png")
+            cam_overlay = cv2.addWeighted(disp_bgr, 0.55, heatmap, 0.45, 0)
+            del disp_bgr, heatmap
+
+            vis_uri = encode_cv2_to_base64_data_uri(cam_overlay, "png", max_dim=640)
+            del cam_overlay
 
             target_name = CLASS_NAMES[target_class_idx]
             return {
@@ -517,8 +559,24 @@ class MLDetectorService:
                 "available": False,
                 "target_class": None,
                 "visualization": None,
-                "explanation": f"Grad-CAM generation encountered an issue: {str(e)}"
+                "explanation": f"Grad-CAM influence map generation was skipped for memory safety: {str(e)}"
             }
+        finally:
+            if handle_f is not None:
+                try:
+                    handle_f.remove()
+                except Exception:
+                    pass
+            if handle_b is not None:
+                try:
+                    handle_b.remove()
+                except Exception:
+                    pass
+            if self.model is not None:
+                try:
+                    self.model.zero_grad(set_to_none=True)
+                except Exception:
+                    pass
 
 
 # Singleton instance loaded once across the application lifecycle
