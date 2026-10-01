@@ -3,7 +3,11 @@
  * Interacts with the backend digital forensic pipeline.
  */
 
-const BASE_URL = import.meta.env.VITE_API_URL || '';
+// Centralized API Base URL:
+// Reads from Vite environment variable VITE_API_BASE_URL in production (e.g. https://pixelproof-74zd.onrender.com)
+// with fallback to local development server (http://localhost:8000).
+const rawBaseUrl = import.meta.env.VITE_API_BASE_URL || import.meta.env.VITE_API_URL || 'http://localhost:8000';
+const BASE_URL = rawBaseUrl.replace(/\/+$/, '');
 
 export async function checkBackendHealth() {
   try {
