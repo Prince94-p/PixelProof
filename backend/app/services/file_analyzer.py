@@ -1,13 +1,19 @@
 import hashlib
 from datetime import datetime, timezone
+import numpy as np
+from app.utils.image_utils import compute_perceptual_hash
 
-def analyze_file_integrity(file_bytes: bytes, file_info: dict) -> dict:
+def analyze_file_integrity(file_bytes: bytes, file_info: dict, cv_gray: np.ndarray = None) -> dict:
     """
-    Performs cryptographic hashing and structural integrity analysis.
-    Produces the immutable SHA-256 digital fingerprint and evaluates basic file integrity.
+    Performs cryptographic hashing, perceptual hashing, and structural container analysis.
+    Produces the immutable SHA-256 digital fingerprint, 64-bit DCT perceptual hash (pHash),
+    and evaluates basic file integrity.
     """
     # Real SHA-256 calculation
     sha256_hash = hashlib.sha256(file_bytes).hexdigest()
+    
+    # 64-bit DCT perceptual hash for visual similarity matching
+    phash_str = compute_perceptual_hash(cv_gray if cv_gray is not None else file_bytes)
     
     size_bytes = len(file_bytes)
     # Format size nicely
@@ -81,7 +87,8 @@ def analyze_file_integrity(file_bytes: bytes, file_info: dict) -> dict:
             "height": height,
             "aspect_ratio": aspect_ratio,
             "sha256": sha256_hash,
+            "perceptual_hash": phash_str,
             "timestamp": timestamp_iso,
-            "explanation": "A SHA-256 hash provides a digital fingerprint for this exact file. Any change to the file produces a different fingerprint."
+            "explanation": "SHA-256 provides exact byte-level cryptographic identity. Perceptual Hash (pHash) provides visual appearance fingerprinting."
         }
     }

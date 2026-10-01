@@ -1,7 +1,18 @@
 import React from 'react';
 import { AlertTriangle, CheckCircle2, AlertOctagon, HelpCircle, Info } from 'lucide-react';
 
-export default function ScoreGauge({ score, maxScore = 100, status, statusCode, confidence, confidenceDescription, summary, disclaimer }) {
+export default function ScoreGauge({
+  score,
+  maxScore = 100,
+  status,
+  statusCode,
+  confidence,
+  confidenceDescription,
+  evidenceQuality,
+  evidenceQualityDescription,
+  summary,
+  disclaimer
+}) {
   // Determine color and icon by status_code
   let themeColor = '#15803D'; // Green
   let themeBg = '#F0FDF4';
@@ -119,15 +130,15 @@ export default function ScoreGauge({ score, maxScore = 100, status, statusCode, 
             padding: '6px 12px',
             borderRadius: '8px'
           }}>
-            <span style={{ fontWeight: 600, color: '#0F172A' }}>Confidence:</span>
+            <span style={{ fontWeight: 600, color: '#0F172A' }}>Evidence Quality:</span>
             <span style={{
               fontWeight: 700,
-              color: confidence === 'High' ? '#15803D' : (confidence === 'Moderate' ? '#2563EB' : '#D97706')
+              color: (evidenceQuality || confidence) === 'High' ? '#15803D' : ((evidenceQuality || confidence) === 'Moderate' ? '#2563EB' : '#D97706')
             }}>
-              {confidence}
+              {evidenceQuality || confidence}
             </span>
             <span style={{ color: '#94A3B8' }}>•</span>
-            <span style={{ color: '#64748B' }}>Initial evidence weights</span>
+            <span style={{ color: '#64748B' }}>Usable forensic signal density</span>
           </div>
         </div>
       </div>
@@ -237,6 +248,7 @@ export default function ScoreGauge({ score, maxScore = 100, status, statusCode, 
         <Info size={15} style={{ flexShrink: 0, marginTop: '2px', color: '#2563EB' }} />
         <span>
           <strong>Scientific Principle:</strong> {disclaimer || "This score represents the strength of detected forensic indicators. It is not the probability that the image is fake."}
+          {" "}<em>Evidence quality reflects how much usable forensic information was available for analysis. It does not represent the probability that the result is correct.</em>
         </span>
       </div>
     </div>

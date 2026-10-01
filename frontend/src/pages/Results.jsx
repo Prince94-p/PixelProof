@@ -101,6 +101,8 @@ export default function Results({ analysisData, onReset }) {
             statusCode={result.status_code}
             confidence={result.confidence}
             confidenceDescription={result.confidence_description}
+            evidenceQuality={result.evidence_quality}
+            evidenceQualityDescription={result.evidence_quality_description}
             summary={result.summary}
             disclaimer={result.disclaimer}
           />

@@ -70,19 +70,23 @@ def analyze_noise_consistency(cv_bgr: np.ndarray, cv_gray: np.ndarray) -> dict:
     total_blocks = len(block_noises)
     outlier_ratio = outlier_count / max(1, total_blocks)
 
-    # 4. Generate Professional Forensic Heatmap
-    # Normalize noise grid to 0-255
-    min_val, max_val = float(np.min(noise_grid)), float(np.max(noise_grid))
-    val_range = max(1e-4, max_val - min_val)
-    norm_grid = ((noise_grid - min_val) / val_range * 255.0).astype(np.uint8)
+    # 4. Generate Professional Forensic Heatmap with Robust Absolute Reference
+    # Avoid relative stretching that makes micro-variations on clean images appear as false-positive hot spots
+    min_ref_span = 2.5
+    ref_min = max(0.0, global_median_noise - max(min_ref_span * 0.4, 2.5 * noise_iqr))
+    ref_max = max(ref_min + min_ref_span, global_median_noise + max(min_ref_span * 0.6, 3.5 * noise_iqr))
+    
+    # Clip to robust reference bounds
+    clipped_grid = np.clip(noise_grid, ref_min, ref_max)
+    norm_grid = ((clipped_grid - ref_min) / (ref_max - ref_min) * 255.0).astype(np.uint8)
     
     # Resize up to image dimensions with smooth bicubic interpolation
     heatmap_resized = cv2.resize(norm_grid, (w, h), interpolation=cv2.INTER_CUBIC)
     
-    # Apply scientific colormap (COLORMAP_CIVIDIS or VIRIDIS)
+    # Apply scientific colormap (COLORMAP_CIVIDIS is perceptually uniform and colorblind safe)
     colored_heatmap = cv2.applyColorMap(heatmap_resized, cv2.COLORMAP_CIVIDIS)
     
-    # Blend with grayscale background (50% background, 50% heatmap)
+    # Blend with grayscale background (45% background, 55% heatmap)
     gray_bgr = cv2.cvtColor(cv_gray, cv2.COLOR_GRAY2BGR)
     overlay = cv2.addWeighted(gray_bgr, 0.45, colored_heatmap, 0.55, 0)
     
@@ -118,12 +122,15 @@ def analyze_noise_consistency(cv_bgr: np.ndarray, cv_gray: np.ndarray) -> dict:
             "No isolated regions exhibiting artificial smoothing or contrasting sensor noise profiles were detected."
         )
 
+    score = min(max_score, max(0, score))
+
     return {
         "score": score,
         "max_score": max_score,
         "status": status,
         "finding": finding,
         "explanation": explanation,
+        "visualization_note": "Heatmap visualizes local sensor noise variance relative to image-wide baseline. Warm tones reflect higher local noise dispersion, not confirmed manipulation.",
         "metrics": {
             "global_median_noise": round(global_median_noise, 3),
             "noise_iqr": round(noise_iqr, 3),

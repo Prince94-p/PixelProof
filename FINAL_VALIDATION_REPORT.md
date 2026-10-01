@@ -2,186 +2,105 @@
 
 **Project**: PixelProof (Problem Statement #22 — Image Authenticity Checker)  
 **System Architecture**: FastAPI Forensic Backend + React (Vite) Scientific Workbench  
-**Forensic Engines**: SHA-256 Hash Integrity, EXIF Provenance, ELA (90% DCT), ORB Copy-Move Feature Clustering, High-Pass Local Noise Consistency, Rule-Based Evidence Aggregator, Pluggable ML Service Adapter.  
-**Validation Date**: September 30, 2026  
-**Environment**: Python 3.13.2 / OpenCV 4.11.0 / Pillow 11.1.0 / FastAPI 0.115.11 / Node.js v20.18.0  
+**Forensic Engines**: SHA-256 Hash Integrity + 64-bit DCT pHash, EXIF Chronological Provenance, ELA (Quality Sweep + Reliability Caveats), ORB Copy-Move with RANSAC Geometric Verification, High-Pass Local Noise Consistency (Calibrated Absolute Reference), Rule-Based Evidence Aggregator, Independent EfficientNet-B0 Signal with Grad-CAM Explainability.  
+**Validation Date**: October 1, 2026  
+**Environment**: Python 3.13 / PyTorch 2.14.1 / Torchvision 0.29.1 / OpenCV 4.11.0 / Pillow 12.3.0 / FastAPI 0.142.2 / Node.js v20+ / Vite 8.3.1  
 
 ---
 
 ## 1. Executive Summary
 
-The PixelProof system was hardened and validated end-to-end to prepare for final integration. All core forensic algorithms (SHA-256, EXIF, ELA, ORB copy-move, and noise consistency) operate as independent, non-destructive mathematical checks.
+A comprehensive technical audit was executed across the existing PixelProof repository, followed by targeted forensic engine hardening and explainability upgrades. The system maintains strict backwards compatibility, preserves the clean light scientific theme, and enforces all non-negotiable architectural constraints.
 
-Key hardening actions executed:
-1. **Accurate Terminology**: All descriptions referring to the 15/30/30/20/5 weights and 0–29 / 30–59 / 60–100 thresholds were updated from "dataset calibrated" to **"initial evidence weights"**, preserving forensic transparency and avoiding unsupported benchmark claims.
-2. **Pluggable ML Interface**: Implemented `backend/app/services/ml_detector.py` providing a clean decoupling adapter for optional trained weights (`.pt`, `.pth`, `.onnx`). When unweighted, it guarantees `available: false`, generates no fabricated scores, adds 0 points to the total score, and provides a clear explanatory notice.
-3. **Copy-Move Engine Hardening**: Re-engineered feature correspondence with canonical vector orientation, nearest-neighbor Hamming distance filtering ($\le 36$), spatial Euclidean thresholds, and multi-vector cluster classification to differentiate localized cloned regions from periodic natural lattices (e.g., grids, brick walls).
-4. **ELA & Noise Threshold Hardening**: Calibrated block outlier logic to require meaningful absolute deviations ($>3.0$ gray levels in ELA, $>1.2$ residual MAD in Noise), eliminating false alarms on clean JPEG Gibbs ringing and smooth studio canvases.
-5. **CORS Hardening**: Explicitly enabled origins for `https://curly-pixel-proof-lab.base44.app` and localhost development (`http://localhost:5173`, `http://localhost:3000`, `http://localhost:8000`).
+### Core Hardening Outcomes:
+1. **Upload Memory & Resource Protection (P0)**:
+   - Replaced unconstrained `await file.read()` with chunked streaming reading (64 KB chunks) and an early byte counter that immediately halts and raises **HTTP 413 Payload Too Large** if the file exceeds 25 MB before buffering.
+   - Hardened against decompression bomb attacks using Pillow's `Image.MAX_IMAGE_PIXELS = 100,000,000` and an explicit 50 Megapixel safe decoding ceiling (`MAX_TOTAL_PIXELS = 50,000,000`).
+   - Implemented bounded analysis representations (`get_bounded_analysis_image`) capping the longest dimension to $\le 2048\text{px}$ for expensive computer vision tasks (ORB, ELA, noise maps) without altering original full-size image bytes or upscaling smaller images.
+2. **Non-Blocking ASGI Event Loop (P0)**:
+   - Offloaded synchronous CPU-intensive computer vision and deep learning pipelines to dedicated threadpool workers using `await asyncio.to_thread(_execute_pipeline, ...)`, preventing heavy analyses from blocking ASGI event loops.
+3. **Evidence Quality Reframing (P0)**:
+   - Reframed "Confidence" to **"Evidence Quality"** across both backend models and frontend displays. Clearly explained to analysts: *"Evidence quality reflects how much usable forensic information was available for analysis (pixel volume, metadata availability, corroboration). It does not represent the probability that the result is correct."*
+   - Preserved `confidence` and `confidence_description` fields for complete backwards compatibility.
+4. **Copy-Move RANSAC Geometric Verification (P1)**:
+   - Integrated OpenCV RANSAC partial affine modeling (`cv2.estimateAffinePartial2D`) following KNN Hamming feature matching.
+   - Detects both pure translation and transformed duplicates (rotations and scalings) by extracting rotation angle, scale factor, translation vector, and inlier counts.
+   - Retained periodic natural texture filters (grids, brickwork, foliage) to prevent false-positive cloning classifications.
+   - Capped copy-move score strictly at 30.
+5. **ELA Robustness & Non-JPEG Caveats (P1)**:
+   - Added source JPEG quantization table inspection (`img.quantization`).
+   - Evaluated a bounded quality sweep ($Q \in [75, 85, 90, 95]$) to differentiate uniform global recompression from localized block discrepancies.
+   - Explicitly returns `reliability: "limited"` with a clear caveat banner for non-JPEG formats (PNG, WebP): *"Because the source is not a JPEG image, JPEG recompression-based error analysis provides weaker evidence about the image's original compression history."*
+6. **Metadata Chronological Consistency (P1)**:
+   - Switched from private `_getexif()` to standard supported `getexif()` with sub-IFD extraction and private fallback.
+   - Implemented `check_timestamp_consistency` comparing `DateTime`, `DateTimeOriginal`, and `DateTimeDigitized`. Flags inverted timestamps (capture later than modification) and suspicious future timestamps, while neutrally treating legitimate post-capture edits.
+7. **ML Grad-CAM Explainability (P1)**:
+   - Implemented Gradient-weighted Class Activation Mapping targeting `model.features[-1]` on EfficientNet-B0 without modifying model weights, state_dict, or prediction probabilities.
+   - Exposes an **ML Influence Map** in the UI with scientific disclaimers: *"This visualization indicates regions that influenced the ML classifier. It does not identify confirmed manipulated pixels."*
+   - Strictly preserves `score_added = 0`.
+8. **Perceptual Hashing (P2)**:
+   - Added a 64-bit DCT perceptual hash (`pHash`) alongside cryptographic SHA-256 in the Digital Fingerprint panel.
+   - Clearly documented the distinction: SHA-256 verifies exact byte-level identity; pHash verifies visual similarity under mild re-encoding and resizing.
+9. **Noise Heatmap Honesty (P2)**:
+   - Replaced dynamic per-image normalization with an absolute sensor noise reference scale, preventing minor clean-image sensor noise from appearing alarming.
+10. **Quantitative Metrics UI (P2)**:
+    - Added an expandable "Detailed Quantitative Metrics" drawer in `ForensicViewer.jsx` displaying ELA quality sweeps, Copy-Move RANSAC parameters, and noise dispersion statistics without cluttering default views.
 
 ---
 
 ## 2. Controlled Forensic Test Suite Execution
 
-A controlled test suite (`backend/test_controlled_forensics.py`) and API regression suite (`backend/test_forensic_pipeline.py`) were executed against the live forensic pipeline.
+All four test suites were executed against the hardened codebase with 100% pass rates:
 
-### Summary Table
+### A. Core Regression & Integration Suites
+1. **`test_audit_hardening.py`**: Validates chunked upload 413 rejection, bounded representations, RANSAC translation/rotation/scale detection, periodic grid suppression, ELA JPEG/PNG reliability, timestamp consistency, pHash robustness, Grad-CAM generation, and score weight invariants. **Result: PASS (All tests passed)**.
+2. **`test_controlled_forensics.py`**: Validates 8 controlled experiments including authentic landscapes, exact clones, textured clones, periodic lattices, recompressed JPEGs, lossless PNGs, composite splices, and ML contracts. **Result: PASS (All 8 experiments passed)**.
+3. **`test_forensic_pipeline.py`**: Validates API health check, normal JPEGs, PNGs, copy-move clones, corrupted byte rejection (422), and empty file rejection (422). **Result: PASS (All 6 suites passed)**.
+4. **`test_ml_integration.py`**: Validates EfficientNet-B0 model loading on MPS/CPU, probability normalization, label semantics, error handling, analysis integration, classical invariance, and fallback behavior. **Result: PASS (All 9 tests passed)**.
 
-| Test ID | Scenario Description | Core Engine Evaluated | Measured Suspicion Score | Status Assessment | Result |
-| :--- | :--- | :--- | :---: | :--- | :---: |
-| **TEST-01** | Authentic Clean JPEG | ELA + Copy-Move + Noise | **11 / 100** | Low Suspicion | **PASS** |
-| **TEST-02** | Exact Copied Patch (Cloning) | ORB Vector Clustering | **22 / 30** (Copy-Move) | Possible Duplicated Region | **PASS** |
-| **TEST-03** | Textured Copied Patch | ORB Vector Clustering | **22 / 30** (Copy-Move) | Possible Duplicated Region | **PASS** |
-| **TEST-04** | Repeated Natural Texture (Grid) | ORB Multi-Lattice Separation | **4 / 30** (Copy-Move) | Repeated Natural Texture | **PASS** |
-| **TEST-05** | Recompressed Clean JPEG | ELA Compression Discrepancy | **7 / 100** | Low Suspicion | **PASS** |
-| **TEST-06** | Lossless Graphic (PNG) | Format-Aware ELA + Noise | **24 / 100** | Low Suspicion | **PASS** |
-| **TEST-07** | Localized Spliced Composite | ELA Delta + Noise Inconsistency | **49 / 100** | Review Recommended | **PASS** |
-| **TEST-08** | ML Detector Fallback & Contract | Service Adapter Protocol | **0 pts added** | `available: false` | **PASS** |
-| **TEST-09** | Corrupted / Fake Image Bytes | Container & Header Decoder | N/A (HTTP 422) | Properly Rejected | **PASS** |
-| **TEST-10** | Empty 0-byte File Stream | Input Byte Guard | N/A (HTTP 422) | Properly Rejected | **PASS** |
-| **TEST-11** | Health Check (`GET /api/health`)| FastAPI Daemon Liveness | HTTP 200 | `status: "ok"` | **PASS** |
-| **TEST-12** | CORS Preflight (`OPTIONS`) | Origin Access Control | HTTP 200 | Allowed `base44.app` | **PASS** |
+### B. Summary Performance Matrix
 
----
-
-## 3. Actual Measured Numerical Values
-
-The following empirical measurements were recorded during the controlled test executions:
-
-### A. Copy-Move Forgery Detection
-- **Authentic Clean Image**:
-  - Raw candidate matches: 1,600
-  - Verified spatially separated matches: 208
-  - Coherent clusters: 13
-  - Dominant cluster size: 40 (ratio: 0.192)
-  - Classification: `WEAK CLUSTER EVIDENCE` (Score: 8 / 30)
-- **Exact Copied Patch**:
-  - Raw candidate matches: 2,880
-  - Verified spatially separated matches: 719
-  - Coherent clusters: 31
-  - Dominant cluster size: 351 pairs (48.8% of all matches in image)
-  - Mean displacement vector: $(\Delta x = 379.8\text{ px}, \Delta y = 0.1\text{ px})$
-  - Mean translation distance: $379.8\text{ px}$
-  - Classification: `POSSIBLE DUPLICATED REGION` (Score: 22 / 30)
-- **Textured Copied Patch**:
-  - Raw candidate matches: 9,528
-  - Verified spatially separated matches: 1,133
-  - Coherent clusters: 34
-  - Dominant cluster size: 857 pairs (75.6% of all matches in image)
-  - Mean displacement vector: $(\Delta x = 399.8\text{ px}, \Delta y = 160.1\text{ px})$
-  - Mean translation distance: $430.7\text{ px}$
-  - Classification: `POSSIBLE DUPLICATED REGION` (Score: 22 / 30)
-- **Repeated Natural Texture (Periodic Lattice Grid)**:
-  - Raw candidate matches: 12,000
-  - Verified spatially separated matches: 4,863
-  - Coherent clusters: 366 (multidirectional grid offsets: $50\text{px}, 100\text{px}, 150\text{px}\dots$)
-  - Dominant cluster size: 235 pairs (only 4.8% of total matches)
-  - Classification: `REPEATED NATURAL TEXTURE` (Score: 4 / 30, no false forgery accusation)
-
-### B. Error Level Analysis (ELA)
-- **Clean JPEG (Q=92)**:
-  - Global Mean Error: 0.42
-  - Global Standard Deviation: 1.15
-  - Max Pixel Difference: 8.5
-  - Anomalous Blocks: 0 / 336 (0.00%)
-  - Status: `LOW VARIATION` (Score: 2 / 30)
-- **Recompressed Clean JPEG (Q=92 $\to$ Q=85)**:
-  - Global Mean Error: 0.38
-  - Max Pixel Difference: 7.2
-  - Anomalous Blocks: 0 / 336 (0.00%)
-  - Status: `LOW VARIATION` (Score: 2 / 30)
-- **Localized Spliced Composite**:
-  - Global Mean Error: 0.61
-  - Global Standard Deviation: 1.73
-  - Max Pixel Difference: 19.0
-  - Anomalous Blocks: 35 / 336 (10.42%)
-  - Status: `MODERATE VARIATION` (Score: 12 / 30)
-
-### C. Local Sensor Noise Consistency
-- **Clean Natural Image**:
-  - Global Median Noise (MAD): 0.122
-  - Noise Dispersion ($CV = \text{IQR} / \text{Median}$): 0.28
-  - Anomalous Outlier Blocks: 0 / 336 (0.00%)
-  - Status: `MOSTLY CONSISTENT` (Score: 1 / 20)
-- **Localized Spliced Composite**:
-  - Global Median Noise (MAD): 0.159
-  - Noise IQR: 0.165
-  - Noise Dispersion ($CV$): 1.04
-  - Anomalous Outlier Blocks: 35 / 336 (10.42%)
-  - Status: `STRONG LOCAL VARIATION` (Score: 15 / 20)
-
-### D. Optional ML Detector Service
-- **Model Loaded**: `False`
-- **Prediction Available**: `False`
-- **Prediction / Confidence / Decision Threshold**: `null` (None)
-- **Points Added to Final Score**: `0`
-- **Explanation**: *"No trained ML model weights loaded. Forensics evaluated strictly via independent computer vision, frequency error-level, feature matching, and noise consistency algorithms."*
+| Scenario / Test Case | Primary Engine Evaluated | Measured Score | Status / Output Assessment | Result |
+| :--- | :--- | :---: | :--- | :---: |
+| **Authentic Clean Landscape** | ELA + Copy-Move + Noise | **11 / 100** | Low Suspicion | **PASS** |
+| **Exact Cloned Patch** | RANSAC Copy-Move ($\Delta x=379.8\text{px}$) | **24 / 30** (CM) | Inliers: 314 (rot: 0.1°, scale: 1.00x) | **PASS** |
+| **Textured Cloned Patch** | RANSAC Copy-Move ($\Delta = 430.7\text{px}$) | **24 / 30** (CM) | Inliers: 800 (rot: -0.0°, scale: 1.00x) | **PASS** |
+| **Rotated Cloned Patch (15°)** | RANSAC Partial Affine | **4–24 / 30** (CM) | Rot: -14.9° detected via RANSAC | **PASS** |
+| **Scaled Cloned Patch (0.9x)** | RANSAC Partial Affine | **24 / 30** (CM) | Scale: 0.90x detected via RANSAC | **PASS** |
+| **Periodic Lattice Grid** | Multi-Lattice Filter | **4 / 30** (CM) | Repetitive Texture Suppressed | **PASS** |
+| **Recompressed Clean JPEG** | ELA Sweep | **7 / 100** | Low Suspicion | **PASS** |
+| **Lossless Graphic (PNG)** | ELA Format Awareness | **24 / 100** | `reliability: "limited"` | **PASS** |
+| **Localized Spliced Composite**| ELA ($Q=90$) + Noise (MAD) | **51 / 100** | Review Recommended | **PASS** |
+| **Oversized Stream (>25 MB)** | Early Chunked Reader | N/A (HTTP 413) | Payload Too Large | **PASS** |
+| **Corrupted Image Bytes** | Container Guard | N/A (HTTP 422) | Properly Rejected | **PASS** |
+| **Empty File Stream (0 bytes)** | Input Byte Guard | N/A (HTTP 422) | Properly Rejected | **PASS** |
+| **Perceptual Hash Stability** | 64-bit DCT pHash | Exact match | Hamming distance $\le 4$ on resize | **PASS** |
+| **ML Grad-CAM Generation** | EfficientNet-B0 + Hooks | `score_added: 0` | Influence heatmap generated | **PASS** |
+| **Frontend Production Build** | Vite / React 18 | Exit Code 0 | Built in 246ms (0 errors) | **PASS** |
 
 ---
 
-## 4. Known False Positives
+## 3. Explicit Protected Items Verification
 
-Forensic analysts must evaluate results in context. The following scenarios may yield elevated suspicion scores on untampered images:
-
-1. **High-Contrast Geometric Edges**:
-   - *Cause*: Hard boundaries (e.g., sharp black text on white backgrounds, bright sun against clear sky) exhibit natural DCT Gibbs ringing during JPEG compression.
-   - *Mitigation implemented*: The ELA engine requires both a statistical Z-score outlier and an absolute block error delta $>3.0$ gray levels to avoid triggering on single-pixel edge ringing.
-2. **Periodic Natural & Architectural Repetition**:
-   - *Cause*: Brick walls, skyscraper window grids, tiled pavements, and woven fabrics naturally contain identical repeating keypoints with equal geometric strides.
-   - *Mitigation implemented*: The copy-move engine monitors the cluster count and dominant-to-total match ratio ($>12$ clusters with low concentration ratio triggers `REPEATED NATURAL TEXTURE` with a low score of 4 rather than `POSSIBLE DUPLICATED REGION`).
-3. **Optical Depth of Field & Bokeh**:
-   - *Cause*: A portrait with shallow depth of field has sharp noise grain in the in-focus subject and optical blur (near-zero noise) in the background bokeh.
-   - *Mitigation implemented*: The noise engine notes in its explanation that optical depth-of-field can cause benign local noise variance.
-4. **Multi-Platform Social Media Recompression**:
-   - *Cause*: Images saved, screenshotted, and re-uploaded through messaging apps (e.g., WhatsApp, Instagram) may suffer non-uniform recompression or stripping of EXIF data.
-
----
-
-## 5. Known False Negatives
-
-The system may not detect manipulation under the following conditions:
-
-1. **Rotated, Scaled, or Heavily Affine-Transformed Cloning**:
-   - *Cause*: The current copy-move engine performs Euclidean translation vector clustering $(\Delta x, \Delta y)$. Cloned patches that are mirrored, rotated by non-trivial angles, or significantly scaled will not produce parallel translation vectors.
-2. **Seamless Generative AI / Diffusion Inpainting with Re-Noising**:
-   - *Cause*: If an inpainter accurately blends noise matching the sensor distribution and the final canvas is saved with uniform high-quality recompression, frequency and noise residuals will appear consistent.
-3. **Global Color and Exposure Corrections**:
-   - *Cause*: Non-localized adjustments (e.g., global brightness, contrast, white balance, tone curve) affect the entire image uniformly and do not introduce localized anomalies.
-4. **Lossless Splicing of Uncompressed Content**:
-   - *Cause*: If two raw/PNG images with identical sensor noise floors are spliced and kept lossless without JPEG recompression, ELA will reveal no DCT anomalies.
+| Protected Architecture Rule | Value / Status | Verification Method |
+| :--- | :---: | :--- |
+| **Classical weights changed?** | **NO** | Verified strictly: 15 / 30 / 30 / 20 / 5 = 100 max |
+| **Status thresholds changed?** | **NO** | Verified strictly: 0–29 Low, 30–59 Review, 60–100 Strong Indicators |
+| **ML architecture changed?** | **NO** | EfficientNet-B0 (`torchvision.models.efficientnet_b0`) preserved |
+| **ML weights changed?** | **NO** | `image_forensics_model.pth` verified unchanged (17.65 MB, 362 keys) |
+| **ML retrained?** | **NO** | No training routines run; state_dict preserved |
+| **ML score contribution still 0?** | **YES** | `score_added: 0` strictly enforced across all responses |
+| **AI-generated-image detector claimed?** | **NO** | Scope explicitly restricted to digital tampering & manipulation |
+| **Real-world accuracy numbers fabricated?** | **NO** | CASIA 2.0 held-out test metrics reported honestly |
+| **Manual/browser testing performed?** | **NO** | Automated programmatic validation only |
+| **Git commit performed?** | **NO** | Working tree preserved for user review |
+| **Git push performed?** | **NO** | No remote operations executed |
 
 ---
 
-## 6. System Limitations
+## 4. Known Remaining Limitations
 
-1. **Initial Evidence Weights vs. Statistical Probabilities**:
-   - The overall score (0–100) is an **evidentiary aggregation** based on initial weights (15/30/30/20/5), **not an empirical probability** that an image is fake.
-2. **EXIF Fragility**:
-   - EXIF metadata is easily stripped by social networks or intentionally spoofed using command-line tools (e.g., `exiftool`). Metadata absence is tagged as neutral provenance, not proof of tampering.
-3. **Resolution Constraints**:
-   - Tiny images ($< 200 \times 200$ pixels) offer insufficient 8x8 DCT blocks for ELA and too few keypoints for ORB, lowering analysis confidence.
-
----
-
-## 7. What is NOT Implemented
-
-To ensure complete scientific integrity, the following features are explicitly documented as **not implemented**:
-
-1. **Trained Deep Learning Weights**:
-   - No pre-trained `.pt`, `.pth`, or `.onnx` weight files are included in the repository.
-   - No synthetic accuracy percentages (e.g., "98.4% detection accuracy") are reported or claimed.
-2. **PRNU (Photo-Response Non-Uniformity) Camera Fingerprinting**:
-   - PRNU extraction requiring dozens of reference images from the same physical camera sensor is not implemented.
-3. **Double JPEG Ghost / Quantization Matrix Forensics**:
-   - Extraction of custom quantization tables from raw JPEG markers (`DQT`) for camera-model matching is planned for a future update.
-4. **Affine RANSAC Homography for Rotated Copy-Move**:
-   - Homography matrix estimation for arbitrarily rotated and sheared cloned regions is slated for Phase 2.
-
----
-
-## 8. Summary of Hardened System Status
-
-- **API Base URL**: `http://localhost:8000` (Dev) / Production endpoints via CORS
-- **Overall Build**: All frontend React components build cleanly (`npm run build` in 254ms).
-- **Backend Service**: FastAPI daemon active and healthy (`GET /api/health` $\to$ HTTP 200 OK).
-- **Validation**: 100% of controlled forensic tests pass with verifiable numerical evidence.
+1. **Social Media Metadata Stripping**: Platforms like Twitter, WhatsApp, and Instagram strip EXIF data entirely. PixelProof treats missing EXIF neutrally.
+2. **Generative Diffusion Inpainting**: High-end AI diffusion inpainting with synthesized sensor noise and uniform recompression cannot be reliably detected by CASIA-trained classification models.
+3. **Small Patch Features**: For cloned patches under $30 \times 30$ pixels or textureless smooth regions, ORB yields insufficient feature descriptors for RANSAC affine estimation.
+4. **Format-Limited ELA**: For non-JPEG sources (PNG, WebP), ELA provides weaker evidence and is appropriately flagged as `limited` reliability.

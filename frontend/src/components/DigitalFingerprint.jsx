@@ -3,6 +3,7 @@ import { Fingerprint, Copy, Check, Hash, FileCode, Clock, Shield } from 'lucide-
 
 export default function DigitalFingerprint({ fileInfo }) {
   const [copied, setCopied] = useState(false);
+  const [copiedPhash, setCopiedPhash] = useState(false);
 
   if (!fileInfo) return null;
 
@@ -11,6 +12,14 @@ export default function DigitalFingerprint({ fileInfo }) {
       navigator.clipboard.writeText(fileInfo.sha256);
       setCopied(true);
       setTimeout(() => setCopied(false), 2500);
+    }
+  };
+
+  const handleCopyPhash = () => {
+    if (fileInfo.perceptual_hash) {
+      navigator.clipboard.writeText(fileInfo.perceptual_hash);
+      setCopiedPhash(true);
+      setTimeout(() => setCopiedPhash(false), 2500);
     }
   };
 
@@ -52,7 +61,7 @@ export default function DigitalFingerprint({ fileInfo }) {
               Digital Fingerprint & File Attributes
             </h3>
             <p style={{ fontSize: '13px', color: '#64748B', margin: 0 }}>
-              Cryptographic integrity verification and container properties
+              Cryptographic integrity verification, perceptual hashing, and container properties
             </p>
           </div>
         </div>
@@ -75,37 +84,106 @@ export default function DigitalFingerprint({ fileInfo }) {
           }}
         >
           {copied ? <Check size={14} /> : <Copy size={14} />}
-          <span>{copied ? 'Hash Copied!' : 'Copy SHA-256'}</span>
+          <span>{copied ? 'SHA-256 Copied!' : 'Copy SHA-256'}</span>
         </button>
       </div>
 
-      {/* SHA-256 Hash Display Box */}
+      {/* Dual Hash Display: Cryptographic SHA-256 & Perceptual Hash */}
       <div style={{
-        backgroundColor: '#F8FAFC',
-        border: '1px solid #E2E8F0',
-        borderRadius: '8px',
-        padding: '14px 18px',
+        display: 'grid',
+        gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))',
+        gap: '16px',
         marginBottom: '20px'
       }}>
+        {/* SHA-256 Display Box */}
         <div style={{
-          fontSize: '11px',
-          fontWeight: 700,
-          textTransform: 'uppercase',
-          letterSpacing: '0.06em',
-          color: '#64748B',
-          marginBottom: '6px'
+          backgroundColor: '#F8FAFC',
+          border: '1px solid #E2E8F0',
+          borderRadius: '8px',
+          padding: '14px 18px'
         }}>
-          CRYPTOGRAPHIC SHA-256 HASH
+          <div style={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            marginBottom: '6px'
+          }}>
+            <div style={{
+              fontSize: '11px',
+              fontWeight: 700,
+              textTransform: 'uppercase',
+              letterSpacing: '0.06em',
+              color: '#64748B'
+            }}>
+              CRYPTOGRAPHIC SHA-256 HASH
+            </div>
+            <span style={{ fontSize: '11px', color: '#2563EB', fontWeight: 600 }}>Exact Byte-Level Identity</span>
+          </div>
+          <div style={{
+            fontSize: '12px',
+            fontFamily: 'var(--font-mono)',
+            color: '#0F172A',
+            wordBreak: 'break-all',
+            lineHeight: '1.5',
+            userSelect: 'all'
+          }}>
+            {fileInfo.sha256}
+          </div>
         </div>
+
+        {/* Perceptual Hash (pHash) Display Box */}
         <div style={{
-          fontSize: '13px',
-          fontFamily: 'var(--font-mono)',
-          color: '#0F172A',
-          wordBreak: 'break-all',
-          lineHeight: '1.5',
-          userSelect: 'all'
+          backgroundColor: '#F8FAFC',
+          border: '1px solid #E2E8F0',
+          borderRadius: '8px',
+          padding: '14px 18px'
         }}>
-          {fileInfo.sha256}
+          <div style={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            marginBottom: '6px'
+          }}>
+            <div style={{
+              fontSize: '11px',
+              fontWeight: 700,
+              textTransform: 'uppercase',
+              letterSpacing: '0.06em',
+              color: '#64748B'
+            }}>
+              PERCEPTUAL HASH (pHash - 64-bit DCT)
+            </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <span style={{ fontSize: '11px', color: '#16A34A', fontWeight: 600 }}>Visual Similarity Fingerprint</span>
+              {fileInfo.perceptual_hash && (
+                <button
+                  onClick={handleCopyPhash}
+                  style={{
+                    background: 'none',
+                    border: 'none',
+                    cursor: 'pointer',
+                    color: copiedPhash ? '#15803D' : '#64748B',
+                    padding: 0,
+                    display: 'flex',
+                    alignItems: 'center'
+                  }}
+                  title="Copy pHash"
+                >
+                  {copiedPhash ? <Check size={13} /> : <Copy size={13} />}
+                </button>
+              )}
+            </div>
+          </div>
+          <div style={{
+            fontSize: '13px',
+            fontFamily: 'var(--font-mono)',
+            color: '#0F172A',
+            wordBreak: 'break-all',
+            lineHeight: '1.5',
+            userSelect: 'all'
+          }}>
+            {fileInfo.perceptual_hash || 'pHash unavailable'}
+          </div>
         </div>
       </div>
 
@@ -187,9 +265,9 @@ export default function DigitalFingerprint({ fileInfo }) {
         borderRadius: '8px',
         border: '1px solid #E2E8F0'
       }}>
-        <strong>Forensic Principle:</strong> A SHA-256 hash provides an immutable digital fingerprint for this exact file byte-sequence. 
-        Any modification—even altering a single pixel or metadata tag—produces a completely different hash. 
-        <em> Note: Hashing verifies file integrity and provenance tracking; it does not detect manipulation on its own.</em>
+        <strong>Forensic Principle:</strong> SHA-256 guarantees <em>exact byte-level identity</em> (altering even one bit or metadata tag completely changes the hash). 
+        Perceptual Hash (pHash) computes a <em>visual similarity fingerprint</em> via frequency-domain discrete cosine transform (DCT), remaining stable under mild resizing, lossless format conversion, or minor recompression. 
+        <em> Note: Hashing verifies identity and provenance; it does not detect image tampering on its own.</em>
       </div>
     </div>
   );

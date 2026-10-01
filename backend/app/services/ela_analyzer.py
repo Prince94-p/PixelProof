@@ -81,7 +81,62 @@ def analyze_ela(rgb_img: Image.Image, cv_bgr: np.ndarray, file_format: str) -> d
     # Format-aware adjustments
     is_jpeg = file_format.upper() in ("JPEG", "JPG")
     
-    # Step 7: Initial Evidence Weight & Classification
+    # Step 7: Bounded Quality Sweep & Quantization Inspection
+    source_compression = {
+        "has_quantization_tables": False,
+        "evidence": "No direct quantization tables detected."
+    }
+    
+    if hasattr(rgb_img, "quantization") and rgb_img.quantization:
+        try:
+            q_tables = rgb_img.quantization
+            t0 = q_tables[0] if isinstance(q_tables, dict) and 0 in q_tables else (q_tables[0] if isinstance(q_tables, (list, tuple)) else None)
+            if t0 is not None:
+                t0_vals = list(t0.values()) if isinstance(t0, dict) else list(t0)
+                avg_luma = float(np.mean(t0_vals))
+                source_compression = {
+                    "has_quantization_tables": True,
+                    "quantization_tables_count": len(q_tables),
+                    "luminance_table_average": round(avg_luma, 1),
+                    "evidence": "Source JPEG quantization tables extracted for baseline recompression context."
+                }
+        except Exception:
+            pass
+
+    # Small bounded quality sweep: [75, 85, 90, 95]
+    quality_tests = []
+    for test_q in (75, 85, 90, 95):
+        if test_q == 90:
+            quality_tests.append({
+                "quality": 90,
+                "mean_error": round(global_mean, 2),
+                "max_diff": round(max_diff, 1)
+            })
+        else:
+            try:
+                buf_q = io.BytesIO()
+                rgb_img.save(buf_q, format="JPEG", quality=test_q)
+                buf_q.seek(0)
+                recomp_q = np.array(Image.open(buf_q))
+                recomp_bgr_q = cv2.cvtColor(recomp_q, cv2.COLOR_RGB2BGR)
+                diff_q = cv2.absdiff(cv_bgr, recomp_bgr_q)
+                gray_q = cv2.cvtColor(diff_q, cv2.COLOR_BGR2GRAY)
+                quality_tests.append({
+                    "quality": test_q,
+                    "mean_error": round(float(np.mean(gray_q)), 2),
+                    "max_diff": round(float(np.max(gray_q)), 1)
+                })
+            except Exception:
+                pass
+
+    reliability = "standard" if is_jpeg else "limited"
+    reliability_note = (
+        "Standard JPEG DCT recompression error analysis evaluated across quantization tables."
+        if is_jpeg else
+        "Because the source is not a JPEG image, JPEG recompression-based error analysis provides weaker evidence about the image's original compression history."
+    )
+
+    # Step 8: Initial Evidence Weight & Classification
     # To prevent false positives on natural sharp edges or uniform recompression:
     # Require both statistical outlier blocks AND elevated peak recompression delta
     if anomaly_ratio > 0.07 and max_diff > 16.0 and bm_std > 1.5:
@@ -115,6 +170,8 @@ def analyze_ela(rgb_img: Image.Image, cv_bgr: np.ndarray, file_format: str) -> d
             "Baseline rates reflect format conversion characteristics."
         )
 
+    score = min(max_score, max(0, score))
+
     # Encode ELA visualization
     vis_data_uri = encode_cv2_to_base64_data_uri(visual_ela, "png")
 
@@ -124,6 +181,10 @@ def analyze_ela(rgb_img: Image.Image, cv_bgr: np.ndarray, file_format: str) -> d
         "status": status,
         "finding": finding,
         "explanation": explanation,
+        "reliability": reliability,
+        "reliability_note": reliability_note,
+        "source_compression": source_compression,
+        "quality_tests": quality_tests,
         "metrics": {
             "global_mean_error": round(global_mean, 2),
             "global_std_error": round(global_std, 2),
@@ -131,7 +192,8 @@ def analyze_ela(rgb_img: Image.Image, cv_bgr: np.ndarray, file_format: str) -> d
             "anomalous_block_count": anomalous_blocks,
             "evaluated_blocks": total_blocks,
             "anomaly_ratio_pct": round(anomaly_ratio * 100, 2),
-            "recompression_quality_test": 90
+            "recompression_quality_test": 90,
+            "sweep_quality_count": len(quality_tests)
         },
         "visualization": vis_data_uri
     }

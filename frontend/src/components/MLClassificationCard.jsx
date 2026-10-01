@@ -350,6 +350,94 @@ export default function MLClassificationCard({ mlAnalysis, forensicScore, forens
         </div>
       </div>
 
+      {/* Grad-CAM Explainability: ML Influence Map */}
+      {mlAnalysis.gradcam?.available && mlAnalysis.gradcam?.visualization && (
+        <div style={{
+          marginBottom: '20px',
+          padding: '20px',
+          backgroundColor: '#F8FAFC',
+          border: '1px solid #E2E8F0',
+          borderRadius: '8px'
+        }}>
+          <div style={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            flexWrap: 'wrap',
+            gap: '8px',
+            marginBottom: '12px'
+          }}>
+            <div style={{
+              fontSize: '13px',
+              fontWeight: 700,
+              color: '#0F172A',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '6px'
+            }}>
+              <span>ML Influence Map</span>
+              <span style={{
+                fontSize: '11px',
+                fontWeight: 600,
+                color: '#2563EB',
+                backgroundColor: '#EFF6FF',
+                border: '1px solid #DBEAFE',
+                padding: '2px 8px',
+                borderRadius: '4px'
+              }}>
+                Target: {mlAnalysis.gradcam.target_class || prediction}
+              </span>
+            </div>
+            <div style={{ fontSize: '11px', color: '#64748B' }}>
+              Gradient-weighted Class Activation Mapping (Grad-CAM)
+            </div>
+          </div>
+
+          <div style={{
+            display: 'flex',
+            flexWrap: 'wrap',
+            alignItems: 'center',
+            justifyContent: 'center',
+            gap: '20px',
+            marginBottom: '12px'
+          }}>
+            <div style={{
+              backgroundColor: '#0F172A',
+              padding: '8px',
+              borderRadius: '6px',
+              boxShadow: '0 2px 4px rgba(0,0,0,0.1)'
+            }}>
+              <img
+                src={mlAnalysis.gradcam.visualization}
+                alt="ML Influence Map (Grad-CAM)"
+                style={{
+                  maxWidth: '100%',
+                  maxHeight: '260px',
+                  objectFit: 'contain',
+                  borderRadius: '4px',
+                  display: 'block'
+                }}
+              />
+            </div>
+          </div>
+
+          <div style={{
+            fontSize: '12px',
+            color: '#475569',
+            lineHeight: 1.5,
+            display: 'flex',
+            alignItems: 'flex-start',
+            gap: '6px'
+          }}>
+            <Info size={14} style={{ flexShrink: 0, marginTop: '2px', color: '#2563EB' }} />
+            <span>
+              <strong>Scientific interpretation:</strong> {mlAnalysis.gradcam.explanation || "Highlighted regions contributed more strongly to the model's selected classification."}
+              {" "}<em>This visualization indicates regions that influenced the ML classifier. It does not identify confirmed manipulated pixels.</em>
+            </span>
+          </div>
+        </div>
+      )}
+
       {/* 4. MODEL BENCHMARK SECTION */}
       <div style={{
         marginTop: '8px',

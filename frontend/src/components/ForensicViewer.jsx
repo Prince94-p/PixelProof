@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Eye, Layers, Copy, Activity, ZoomIn, Info, CheckCircle2 } from 'lucide-react';
+import { Eye, Layers, Copy, Activity, ZoomIn, Info, CheckCircle2, ChevronDown, AlertTriangle } from 'lucide-react';
 
 export default function ForensicViewer({ originalImage, ela, copyMove, noise }) {
   const [activeTab, setActiveTab] = useState('ela'); // 'ela', 'copy_move', 'noise', 'original'
@@ -251,6 +251,28 @@ export default function ForensicViewer({ originalImage, ela, copyMove, noise }) 
         </div>
       </div>
 
+      {/* Non-JPEG ELA Reliability Notice */}
+      {activeTab === 'ela' && ela?.reliability_note && (
+        <div style={{
+          display: 'flex',
+          alignItems: 'flex-start',
+          gap: '10px',
+          backgroundColor: ela.reliability === 'limited' ? '#FFFBEB' : '#F8FAFC',
+          border: `1px solid ${ela.reliability === 'limited' ? '#FDE68A' : '#E2E8F0'}`,
+          borderRadius: '8px',
+          padding: '12px 16px',
+          marginBottom: '20px',
+          fontSize: '13px',
+          color: ela.reliability === 'limited' ? '#92400E' : '#334155'
+        }}>
+          <AlertTriangle size={18} color={ela.reliability === 'limited' ? '#D97706' : '#2563EB'} style={{ flexShrink: 0, marginTop: '1px' }} />
+          <span>
+            <strong>{ela.reliability === 'limited' ? 'Compression Format Caveat: ' : 'Compression Context: '}</strong>
+            {ela.reliability_note}
+          </span>
+        </div>
+      )}
+
       {/* Technical Interpretation Legend */}
       <div style={{
         backgroundColor: '#FFFFFF',
@@ -272,35 +294,100 @@ export default function ForensicViewer({ originalImage, ela, copyMove, noise }) 
         </div>
 
         {activeTab === 'ela' && (
-          <p style={{ fontSize: '13px', lineHeight: '1.6', color: '#475569' }}>
-            <strong>How ELA works:</strong> The image is recompressed at a standardized 90% JPEG quality level. 
+          <p style={{ fontSize: '13px', lineHeight: '1.6', color: '#475569', margin: 0 }}>
+            <strong>How ELA works:</strong> The image is recompressed at a standardized JPEG quality sweep (75, 85, 90, 95). 
             Because each compression cycle introduces higher error in uncompressed or newly inserted pixels, 
-            uniform areas should show consistent dull grain. Unusually bright or high-contrast patches against a uniform baseline 
+            uniform areas exhibit consistent dull error. Localized high-contrast clusters against a uniform baseline 
             indicate divergent compression history (e.g. pasted or re-saved elements).
           </p>
         )}
 
         {activeTab === 'copy_move' && (
-          <p style={{ fontSize: '13px', lineHeight: '1.6', color: '#475569' }}>
-            <strong>How Copy-Move works:</strong> ORB (Oriented FAST and Rotated BRIEF) detects high-dimensional texture keypoints. 
-            Points with matching descriptors that share a coherent spatial displacement vector are linked with blue lines. 
-            Convex hulls highlight suspicious duplicate source/target areas. Note that natural repetitive textures (such as window grids, brick walls, or foliage) can produce benign false-positive matches.
+          <p style={{ fontSize: '13px', lineHeight: '1.6', color: '#475569', margin: 0 }}>
+            <strong>How Copy-Move works:</strong> ORB feature detectors identify high-dimensional texture descriptors, matched via KNN Hamming distance. 
+            Coherent spatial displacement vectors are geometrically verified using RANSAC partial affine modeling (rotation and scale estimation) 
+            while natural repetitive textures (grids, brickwork, foliage) are suppressed by periodic density filters.
           </p>
         )}
 
         {activeTab === 'noise' && (
-          <p style={{ fontSize: '13px', lineHeight: '1.6', color: '#475569' }}>
-            <strong>How Noise Consistency works:</strong> A high-pass filter extracts fine residual sensor noise grain. 
-            The canvas is partitioned into blocks, and local noise dispersion (MAD) is computed. The false-color overlay 
-            reveals localized deviations from the sensor noise floor—highlighting artificially smoothed areas or spliced objects from disparate camera sensors.
+          <p style={{ fontSize: '13px', lineHeight: '1.6', color: '#475569', margin: 0 }}>
+            <strong>How Noise Consistency works:</strong> A Laplacian high-pass filter extracts fine sensor grain. 
+            Block-level Median Absolute Deviation (MAD) is mapped onto a calibrated reference baseline. 
+            <em> Note: The false-color scale is anchored to an absolute sensor noise floor to prevent normal camera micro-variations from appearing alarming. Bright colors indicate variance divergence, not confirmed manipulation.</em>
           </p>
         )}
 
         {activeTab === 'original' && (
-          <p style={{ fontSize: '13px', lineHeight: '1.6', color: '#475569' }}>
+          <p style={{ fontSize: '13px', lineHeight: '1.6', color: '#475569', margin: 0 }}>
             <strong>Source Reference:</strong> Displays the decoded input image in standard RGB color space. 
             Compare against the visual forensic tabs above to isolate suspicious features.
           </p>
+        )}
+
+        {/* Expandable Technical Metrics Drawer */}
+        {activeDetails?.metrics && Object.keys(activeDetails.metrics).length > 0 && (
+          <details style={{
+            marginTop: '16px',
+            backgroundColor: '#F8FAFC',
+            border: '1px solid #E2E8F0',
+            borderRadius: '8px',
+            padding: '12px 16px'
+          }}>
+            <summary style={{
+              fontSize: '13px',
+              fontWeight: 700,
+              color: '#0F172A',
+              cursor: 'pointer',
+              userSelect: 'none'
+            }}>
+              Detailed Quantitative Metrics ({activeTab.toUpperCase()}) — Click to Inspect
+            </summary>
+
+            <div style={{
+              display: 'grid',
+              gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))',
+              gap: '10px',
+              marginTop: '12px'
+            }}>
+              {Object.entries(activeDetails.metrics)
+                .filter(([k, v]) => typeof v !== 'object' || v === null)
+                .map(([key, value]) => (
+                  <div key={key} style={{
+                    backgroundColor: '#FFFFFF',
+                    border: '1px solid #E2E8F0',
+                    borderRadius: '6px',
+                    padding: '8px 12px'
+                  }}>
+                    <div style={{ fontSize: '11px', color: '#64748B', fontWeight: 600, textTransform: 'capitalize' }}>
+                      {key.replace(/_/g, ' ')}
+                    </div>
+                    <div style={{ fontSize: '13px', fontWeight: 700, color: '#0F172A', fontFamily: 'var(--font-mono)' }}>
+                      {typeof value === 'number' ? (Number.isInteger(value) ? value : value.toFixed(3)) : String(value)}
+                    </div>
+                  </div>
+                ))}
+            </div>
+
+            {/* Nested Geometric Verification metrics if present in Copy-Move */}
+            {activeDetails.metrics?.geometric_verification && (
+              <div style={{ marginTop: '12px', paddingTop: '10px', borderTop: '1px solid #E2E8F0' }}>
+                <div style={{ fontSize: '12px', fontWeight: 700, color: '#2563EB', marginBottom: '8px' }}>
+                  RANSAC Geometric Verification:
+                </div>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: '8px' }}>
+                  {Object.entries(activeDetails.metrics.geometric_verification).map(([gk, gv]) => (
+                    <div key={gk} style={{ backgroundColor: '#FFFFFF', border: '1px solid #E2E8F0', borderRadius: '4px', padding: '6px 10px' }}>
+                      <div style={{ fontSize: '10px', color: '#64748B', textTransform: 'capitalize' }}>{gk.replace(/_/g, ' ')}</div>
+                      <div style={{ fontSize: '12px', fontWeight: 700, color: '#0F172A', fontFamily: 'var(--font-mono)' }}>
+                        {typeof gv === 'number' ? (Number.isInteger(gv) ? gv : gv.toFixed(3)) : String(gv)}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </details>
         )}
       </div>
     </div>

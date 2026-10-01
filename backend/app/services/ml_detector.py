@@ -349,6 +349,12 @@ class MLDetectorService:
                 confidence = auth_prob
                 explanation = "Model detected visual patterns more consistent with authentic imagery."
 
+            # 3. Optional Grad-CAM Influence Map Generation
+            gradcam_res = self.generate_gradcam(
+                img,
+                target_class_idx=1 if manip_prob > auth_prob else 0
+            )
+
             return {
                 "available": True,
                 "prediction": prediction,
@@ -362,6 +368,7 @@ class MLDetectorService:
                 "disclaimer": "This is an independent machine-learning signal, not the final forensic conclusion.",
                 "signal_type": "Independent ML Signal",
                 "score_added": 0,
+                "gradcam": gradcam_res,
                 "metrics": HELD_OUT_METRICS,
                 "device": str(self._device),
                 # Backward-compatibility aliases
@@ -381,10 +388,122 @@ class MLDetectorService:
                 "model_version": MODEL_VERSION,
                 "explanation": f"ML model inference encountered an error: {str(e)}",
                 "disclaimer": "ML classification failed for this image.",
+                "gradcam": {
+                    "available": False,
+                    "target_class": None,
+                    "visualization": None,
+                    "explanation": "ML inference failed."
+                },
                 "metrics": HELD_OUT_METRICS,
                 "device": str(self._device) if self._device else None,
                 "authentic_prob": None,
                 "manipulated_prob": None,
+            }
+
+    def generate_gradcam(
+        self,
+        img_pil: Image.Image,
+        target_class_idx: Optional[int] = None
+    ) -> Dict[str, Any]:
+        """
+        Computes Grad-CAM model influence visualization on EfficientNet-B0's final feature layer.
+        Does NOT alter model weights or inference probabilities.
+        """
+        if not self.is_available():
+            return {
+                "available": False,
+                "target_class": None,
+                "visualization": None,
+                "explanation": "Grad-CAM unavailable because ML model is not loaded."
+            }
+
+        try:
+            import torch
+            import cv2
+            from app.utils.image_utils import encode_cv2_to_base64_data_uri
+
+            model = self.model
+            target_layer = model.features[-1]
+
+            activations = []
+            gradients = []
+
+            def forward_hook(module, inp, out):
+                activations.append(out)
+
+            def backward_hook(module, grad_in, grad_out):
+                gradients.append(grad_out[0])
+
+            handle_f = target_layer.register_forward_hook(forward_hook)
+            handle_b = target_layer.register_full_backward_hook(backward_hook)
+
+            tensor = self._transform(img_pil.convert("RGB")).unsqueeze(0).to(self._device)
+            tensor.requires_grad_(True)
+
+            model.zero_grad()
+            logits = model(tensor)
+            probs = torch.softmax(logits, dim=1)[0]
+
+            if target_class_idx is None:
+                target_class_idx = int(torch.argmax(probs).item())
+
+            score = logits[0, target_class_idx]
+            score.backward()
+
+            handle_f.remove()
+            handle_b.remove()
+
+            if not activations or not gradients:
+                return {
+                    "available": False,
+                    "target_class": CLASS_NAMES[target_class_idx],
+                    "visualization": None,
+                    "explanation": "Feature activations could not be extracted for Grad-CAM."
+                }
+
+            act = activations[0].detach()   # [1, 1280, 7, 7]
+            grad = gradients[0].detach()     # [1, 1280, 7, 7]
+
+            weights = torch.mean(grad, dim=(2, 3), keepdim=True)  # [1, 1280, 1, 1]
+            cam = torch.sum(weights * act, dim=1, keepdim=True)    # [1, 1, 7, 7]
+            cam = torch.relu(cam)
+
+            cam_np = cam[0, 0].cpu().numpy()
+            max_c = float(np.max(cam_np))
+            min_c = float(np.min(cam_np))
+            if max_c > min_c:
+                cam_norm = ((cam_np - min_c) / (max_c - min_c) * 255.0).astype(np.uint8)
+            else:
+                cam_norm = np.zeros_like(cam_np, dtype=np.uint8)
+
+            # Resize CAM to match original image size for display
+            orig_w, orig_h = img_pil.size
+            cam_resized = cv2.resize(cam_norm, (orig_w, orig_h), interpolation=cv2.INTER_CUBIC)
+            heatmap = cv2.applyColorMap(cam_resized, cv2.COLORMAP_JET)
+
+            orig_bgr = cv2.cvtColor(np.array(img_pil.convert("RGB")), cv2.COLOR_RGB2BGR)
+            cam_overlay = cv2.addWeighted(orig_bgr, 0.55, heatmap, 0.45, 0)
+
+            vis_uri = encode_cv2_to_base64_data_uri(cam_overlay, "png")
+
+            target_name = CLASS_NAMES[target_class_idx]
+            return {
+                "available": True,
+                "target_class": target_name,
+                "visualization": vis_uri,
+                "explanation": (
+                    f"Model attention/influence visualization for '{target_name}' classification. "
+                    "Highlighted regions contributed more strongly to the model's selected classification. "
+                    "This does not identify confirmed manipulated pixels."
+                )
+            }
+        except Exception as e:
+            logger.warning("Grad-CAM generation failed: %s", e)
+            return {
+                "available": False,
+                "target_class": None,
+                "visualization": None,
+                "explanation": f"Grad-CAM generation encountered an issue: {str(e)}"
             }
 
 

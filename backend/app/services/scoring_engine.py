@@ -127,12 +127,18 @@ def calculate_forensic_assessment(
     if evidence_points >= 4:
         confidence = "High"
         confidence_desc = "High confidence based on substantial pixel volume, independent cross-checks, and corroborated findings."
+        evidence_quality = "High"
+        evidence_quality_desc = "High evidence quality based on substantial pixel volume, independent cross-checks, and corroborated forensic indicators. Evidence quality reflects available forensic information, not statistical accuracy probability."
     elif evidence_points >= 2:
         confidence = "Moderate"
         confidence_desc = "Moderate confidence based on standard evidence availability and typical recompression constraints."
+        evidence_quality = "Moderate"
+        evidence_quality_desc = "Moderate evidence quality based on standard evidence availability and typical recompression constraints. Evidence quality reflects available forensic information, not statistical accuracy probability."
     else:
         confidence = "Low"
         confidence_desc = "Low confidence due to constrained image resolution or limited metadata context."
+        evidence_quality = "Low"
+        evidence_quality_desc = "Low evidence quality due to constrained image resolution or limited metadata context. Evidence quality reflects available forensic information, not statistical accuracy probability."
 
     # Build explainable evidence breakdown list
     evidence_list = [
@@ -202,6 +208,8 @@ def calculate_forensic_assessment(
         "status_code": status_code,
         "confidence": confidence,
         "confidence_description": confidence_desc,
+        "evidence_quality": evidence_quality,
+        "evidence_quality_description": evidence_quality_desc,
         "summary": summary,
         "disclaimer": "This score represents the strength of detected forensic indicators based on initial evidence weights (15/30/30/20/5). It is not the probability that the image is fake.",
         "breakdown": {

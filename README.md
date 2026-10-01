@@ -1,242 +1,159 @@
-# PixelProof — Digital Image Forensics & Authenticity Verification
+# PixelProof — Digital Image Forensics & Explainable Authenticity Verification
 
 > **"Don't trust the image. Verify the evidence."**
 
-PixelProof is a full-stack digital image forensics platform built to address **Problem Statement #22: Image Authenticity Checker**. Unlike black-box AI detectors that output opaque percentages ("87% Fake") without justification, PixelProof performs multiple independent scientific, mathematical, and cryptographic analyses on the actual image bytes to provide explainable forensic evidence.
+PixelProof is an explainable digital image forensics and manipulation detection platform built for **Problem Statement #22: Image Authenticity Checker**. Unlike opaque "AI detectors" that output unverified black-box percentages ("87% Fake") without evidentiary justification, PixelProof combines five classical, mathematical, and cryptographic forensic modules with an independent deep learning classification signal and Gradient-weighted Class Activation Mapping (Grad-CAM) explainability.
 
 ---
 
-## Key Features
+## Non-Negotiable Forensic Principles
 
-1. **Cryptographic SHA-256 Digital Fingerprint**: Generates an immutable cryptographic fingerprint from the raw file bytes for provenance tracking and chain-of-custody verification.
-2. **EXIF & Container Metadata Forensics**: Inspects hardware acquisition tags (Camera Make/Model), original timestamps, and software signatures (e.g., Adobe Photoshop, GIMP, Lightroom, Canva).
-3. **Error Level Analysis (ELA)**: Recompresses image pixels at a standardized 90% JPEG quality level to detect localized recompression anomalies characteristic of spliced or pasted elements.
-4. **Copy-Move Forgery Detection**: Employs OpenCV ORB feature extraction, nearest-neighbor matching, spatial separation filters, and displacement vector clustering to identify cloned regions.
-5. **Local Sensor Noise Consistency**: Extracts high-frequency residuals using Gaussian blur subtraction and computes local noise dispersion (Median Absolute Deviation) to uncover spliced zones or airbrushed retouching.
-6. **Transparent Forensic Suspicion Score (0–100)**: An initial multi-engine evidence weighting system with confidence levels and itemized evidence explanations.
-7. **Strict Light Theme UI**: A clean, high-contrast, scientific laboratory design using an enterprise blue/white palette.
+- **"The 0–100 score is an evidence-weighted forensic suspicion score, not a probability that an image is fake."**
+- **"The current weights are initial engineering weights and have not yet been empirically calibrated against a large labelled forensic benchmark."**
+- **"The EfficientNet-B0 model is a supporting experimental signal."**
+- **"The current ML model detects CASIA-style image manipulation patterns, not AI-generated imagery."**
+- **"Evidence quality reflects how much usable forensic information was available for analysis (pixel volume, metadata availability, corroboration). It does not represent the probability that the result is correct."**
 
 ---
 
-## Architecture & Forensic Pipeline
+## Core Architecture & Verification Pipeline
+
+PixelProof operates a multi-engine pipeline ensuring high-throughput security and explainable evidence generation:
 
 ```
-IMAGE UPLOAD
-      ↓
-FILE VALIDATION (Format, Dimension, Container Integrity)
-      ↓
-METADATA / EXIF INSPECTION
-      ↓
-ERROR LEVEL ANALYSIS (90% DCT Recompression)
-      ↓
-COPY-MOVE FORGERY DETECTION (ORB + Vector Clustering)
-      ↓
-NOISE CONSISTENCY ANALYSIS (High-Pass Residual MAD)
-      ↓
-FILE INTEGRITY + SHA-256 FINGERPRINT
-      ↓
-EVIDENCE CROSS-CHECKING & SCORING ENGINE
-      ↓
-INTERACTIVE VISUAL EVIDENCE & EXPLAINABLE REPORT
+                          IMAGE UPLOAD
+                                ↓
+        CHUNKED STREAMING (Early 25MB HTTP 413 Guard)
+                                ↓
+  DECOMPRESSION BOMB & DIMENSION VALIDATION (50 MP Safe Ceiling)
+                                ↓
+    BOUNDED ANALYSIS REPRESENTATION (Max 2048px for Vision Tasks)
+                                ↓
+┌──────────────────────────────────────────────────────────────┐
+│                  CLASSICAL FORENSIC ENGINES                  │
+├──────────────────────────────────────────────────────────────┤
+│ 1. File Integrity & SHA-256 (Exact) + 64-bit DCT pHash       │
+│ 2. Metadata / EXIF Inspection (Chronological consistency)    │
+│ 3. Error Level Analysis (ELA) (JPEG Q=75..95 sweep + caveats)│
+│ 4. Copy-Move Detection (ORB + KNN + RANSAC affine geometry)  │
+│ 5. Local Sensor Noise Consistency (MAD residual heatmap)     │
+└──────────────────────────────────────────────────────────────┘
+                                ↓
+        SYNTHESIS & EVIDENCE-WEIGHTED SCORING (0–100)
+                                ↓
+┌──────────────────────────────────────────────────────────────┐
+│             INDEPENDENT DEEP LEARNING SIGNAL                 │
+├──────────────────────────────────────────────────────────────┤
+│ EfficientNet-B0 (CASIA 2.0 held-out test: 69.62% Acc, 76.36% │
+│ ROC-AUC) + Grad-CAM Feature Attribution (score_added = 0)     │
+└──────────────────────────────────────────────────────────────┘
+                                ↓
+         DISAGREEMENT CHECK & EXPLAINABLE FORENSIC REPORT
 ```
 
 ---
 
-## Scoring Weight & Interpretation
+## Forensic Modules & Weight Allocations
 
-The Forensic Suspicion Score ranges from **0 to 100** using **initial evidence weights**:
+The Forensic Suspicion Score ranges from **0 to 100** based on **initial heuristic engineering evidence weights**:
 
-| Forensic Module | Max Score | Description |
-| :--- | :---: | :--- |
-| **Metadata & Software** | 15 | Detects editing software traces and tag incongruities. |
-| **Error Level Analysis (ELA)** | 30 | Measures localized DCT recompression discrepancies. |
-| **Copy-Move Detection** | 30 | Clusters coherent translation vectors between matched features. |
-| **Noise Consistency** | 20 | Evaluates local sensor noise floor deviation across blocks. |
-| **File Integrity** | 5 | Verifies standard container markers (SOI/EOI/IEND). |
-| **Total** | **100** | **Initial Evidence Suspicion Score** |
+| Forensic Module | Max Score | Analytical Technique | Audit Hardening & Key Capabilities |
+| :--- | :---: | :--- | :--- |
+| **Metadata & EXIF** | 15 | Header parsing, tag analysis, editor signatures | Uses standard `getexif()`, checks chronological timestamp consistency (`DateTime`, `DateTimeOriginal`, `DateTimeDigitized`), flags future or inverted timestamps without treating post-capture saves as fraud. Missing EXIF remains neutral. |
+| **Error Level Analysis (ELA)** | 30 | Standardized DCT recompression error | Evaluates JPEG quality sweep ($Q \in [75, 85, 90, 95]$), inspects source quantization tables. Returns `reliability: "limited"` with explanatory caveats for non-JPEG formats (PNG, WebP). |
+| **Copy-Move Forgery** | 30 | ORB descriptors, KNN matching, spatial clustering | Features OpenCV RANSAC affine partial geometric modeling (`cv2.estimateAffinePartial2D`) to detect rotated and scaled duplicates while preserving periodic texture suppression for grids, bricks, and foliage. |
+| **Noise Consistency** | 20 | High-pass filter, block-level MAD | Normalized against an absolute sensor noise floor rather than per-image dynamic scaling to prevent natural micro-variations from triggering false alarms. |
+| **File Integrity** | 5 | Cryptographic hashing & container markers | Calculates SHA-256 for exact byte-level identity, 64-bit DCT perceptual hash (pHash) for visual similarity, and verifies container boundary markers (SOI/EOI/IEND). |
+| **Total Classical Score**| **100** | **Initial Evidence Suspicion Score** | **Strictly composed of the 5 classical forensic modules.** |
 
-### Suspicion Ranges:
-- **0–29: Low Suspicion** — Findings are consistent across all independent engines.
+### Status Classification Thresholds:
+- **0–29: Low Suspicion** — Visual and container indicators exhibit uniform consistency with no strong manipulation traces.
 - **30–59: Review Recommended** — Moderate anomalies warrant closer manual inspection.
 - **60–100: Strong Manipulation Indicators** — Multiple independent modules corroborate localized tampering.
 
-> **Forensic Principle:** The score represents the strength of detected forensic indicators. It is not the probability that an image is fake.
+---
+
+## Independent Machine Learning Signal & Explainability
+
+PixelProof includes an optional deep learning classifier based on **EfficientNet-B0** fine-tuned on the CASIA 2.0 dataset:
+
+- **Held-out CASIA 2.0 Generalization (1,893 images):**
+  - Accuracy: 69.62%
+  - Precision: 59.42%
+  - Recall: 79.58%
+  - F1 Score: 68.04%
+  - ROC-AUC: 76.36%
+- **Strict Independence:** The model output is strictly an independent signal (`score_added = 0`) and is never added to the classical 0–100 score.
+- **Explainability (Grad-CAM):** Gradient-weighted Class Activation Mapping computes an **ML Influence Map** on the final convolutional feature layer (`model.features[-1]`). This map illustrates regions that influenced the model's classification without claiming to identify confirmed manipulated pixels.
+- **Evidence Disagreement Detection:** When classical forensics and ML signals diverge (e.g. low classical score with manipulated-leaning ML signal), PixelProof highlights an Evidence Disagreement notice recommending manual review.
+
+---
+
+## Security & Resource Protection (P0 Hardening)
+
+1. **Chunked Streaming Uploads (Early HTTP 413):** Uploads are processed in 64 KB chunks with an immediate byte counter. Requests exceeding the 25 MB maximum upload ceiling are aborted immediately before buffering excessive memory.
+2. **Decompression Bomb Protection:** Pillow's pixel decompression ceiling is safeguarded (`Image.MAX_IMAGE_PIXELS = 100,000,000`), with an explicit processing ceiling of 50 Megapixels (`MAX_TOTAL_PIXELS = 50,000,000`), preventing memory exhaustion attacks from malicious image structures.
+3. **Safe Bounded Analysis Representations:** Original bytes are preserved for cryptographic SHA-256, container integrity, and metadata tag inspection. For CPU-intensive computer vision operations (ORB, ELA, noise maps), a bounded representation is created capping the longest dimension to $\le 2048\text{px}$ without upscaling smaller images.
+4. **Non-Blocking ASGI Architecture:** CPU-heavy computer vision pipelines are offloaded to worker threads via `asyncio.to_thread`, keeping FastAPI's ASGI event loop fully responsive.
 
 ---
 
 ## Technology Stack
 
 - **Frontend**: React 18, Vite, Lucide React, CSS3 Design System (Strict Light Theme).
-- **Backend**: Python 3, FastAPI, Uvicorn.
-- **Forensic & Computer Vision Engines**: OpenCV (ORB feature detector, spatial matching, morphological hulls), Pillow (EXIF header parsing, DCT compression simulation), NumPy (statistical dispersion, MAD, matrix operations).
+- **Backend**: Python 3.13, FastAPI, Uvicorn, PyTorch (EfficientNet-B0), Torchvision.
+- **Computer Vision & Math**: OpenCV (ORB feature matching, RANSAC affine estimation, DCT pHash), Pillow (safe decode, EXIF tag extraction), NumPy (statistical dispersion, MAD).
 
 ---
 
-## Folder Structure
-
-```
-pixelproof/
-├── frontend/
-│   ├── src/
-│   │   ├── components/
-│   │   │   ├── Navbar.jsx
-│   │   │   ├── Footer.jsx
-│   │   │   ├── UploadZone.jsx
-│   │   │   ├── ScoreGauge.jsx
-│   │   │   ├── ForensicViewer.jsx
-│   │   │   ├── EvidenceCard.jsx
-│   │   │   ├── MetadataPanel.jsx
-│   │   │   ├── DigitalFingerprint.jsx
-│   │   │   └── LoadingAnalysis.jsx
-│   │   ├── pages/
-│   │   │   ├── Home.jsx
-│   │   │   ├── Analyze.jsx
-│   │   │   ├── Results.jsx
-│   │   │   └── HowItWorks.jsx
-│   │   ├── services/
-│   │   │   └── api.js
-│   │   ├── styles.css
-│   │   ├── App.jsx
-│   │   └── main.jsx
-│   ├── package.json
-│   └── vite.config.js
-├── backend/
-│   ├── app/
-│   │   ├── main.py
-│   │   ├── routes/
-│   │   │   └── analysis.py
-│   │   ├── services/
-│   │   │   ├── file_analyzer.py
-│   │   │   ├── metadata_analyzer.py
-│   │   │   ├── ela_analyzer.py
-│   │   │   ├── copy_move_detector.py
-│   │   │   ├── noise_analyzer.py
-│   │   │   └── scoring_engine.py
-│   │   └── utils/
-│   │       ├── image_utils.py
-│   │       └── validators.py
-│   └── requirements.txt
-└── README.md
-```
-
----
-
-## Installation & Running Locally
+## Installation & Setup
 
 ### 1. Backend Setup
 
 ```bash
-# Navigate to backend directory
 cd backend
-
-# Create Python virtual environment
 python3 -m venv venv
-
-# Activate virtual environment
 source venv/bin/activate  # On Windows: venv\Scripts\activate
-
-# Install dependencies
 pip install -r requirements.txt
-
-# Start the FastAPI server
 uvicorn app.main:app --reload --port 8000
 ```
 
-The backend API will be running at `http://localhost:8000`.  
-Health check endpoint: `GET http://localhost:8000/api/health`.
+Health check: `GET http://localhost:8000/api/health`
 
 ### 2. Frontend Setup
 
 ```bash
-# Navigate to frontend directory in another terminal
 cd frontend
-
-# Install npm dependencies
 npm install
-
-# Start Vite dev server
 npm run dev
 ```
 
-Open your browser at `http://localhost:5173`.
+Application will run locally at `http://localhost:5173`.
 
----
+### 3. Automated Validation Test Suites
 
-## API Specification
+```bash
+cd backend
+source venv/bin/activate
 
-### `GET /api/health`
-Response:
-```json
-{
-  "status": "ok",
-  "service": "PixelProof Forensics"
-}
-```
-
-### `POST /api/analyze`
-Accepts `multipart/form-data` with an image file (`JPG`, `JPEG`, `PNG`, or `WEBP`).
-
-Response structure:
-```json
-{
-  "analysis_id": "0fc9b081-3444-4dd2-89da-5a0ec7b2fe5b",
-  "file": {
-    "filename": "sample.jpg",
-    "format": "JPEG",
-    "mime_type": "image/jpeg",
-    "size": 245120,
-    "size_formatted": "239.4 KB",
-    "width": 1920,
-    "height": 1080,
-    "aspect_ratio": "1.78:1 (1920×1080)",
-    "sha256": "4b227777d4dd1fc61c6f884f48641d02b4d121d3fd328cb08b5531fcacdabf8a",
-    "timestamp": "2026-09-30 20:45:10 UTC"
-  },
-  "result": {
-    "score": 48,
-    "max_score": 100,
-    "status": "Review Recommended",
-    "status_code": "warning",
-    "confidence": "Moderate",
-    "confidence_description": "Moderate confidence based on standard evidence availability.",
-    "summary": "Several forensic indicators warrant closer inspection.",
-    "disclaimer": "This score represents the strength of detected forensic indicators. It is not the probability that the image is fake.",
-    "breakdown": {
-      "metadata": {"score": 8, "max": 15},
-      "ela": {"score": 16, "max": 30},
-      "copy_move": {"score": 20, "max": 30},
-      "noise": {"score": 4, "max": 20},
-      "file_integrity": {"score": 0, "max": 5}
-    }
-  },
-  "metadata": { ... },
-  "ela": {
-    "score": 16,
-    "max_score": 30,
-    "status": "MODERATE VARIATION",
-    "finding": "Localized recompression differences observed.",
-    "explanation": "...",
-    "visualization": "data:image/png;base64,..."
-  },
-  "copy_move": { ... },
-  "noise": { ... },
-  "file_integrity": { ... },
-  "evidence": [ ... ],
-  "original_preview": "data:image/jpeg;base64,..."
-}
+# Run all test suites
+python3 test_audit_hardening.py
+python3 test_controlled_forensics.py
+python3 test_forensic_pipeline.py
+python3 test_ml_integration.py
 ```
 
 ---
 
-## Limitations of Digital Image Forensics
+## Known Forensic Limitations
 
-- **Social Media Compression**: Messaging apps and social networks routinely re-encode and strip metadata from images.
-- **Repetitive Textures**: Natural architectural windows or foliage grids can produce false-positive keypoint matches.
-- **Absence of EXIF**: Missing metadata is standard web behavior and is never treated as standalone proof of manipulation.
-- **Optical Depth-of-Field (Bokeh)**: Shallow depth of field yields smooth, low-noise backgrounds naturally.
+- **Social Media Stripping:** Web platforms and messaging networks strip EXIF metadata and heavily compress images, reducing available forensic evidence density.
+- **Periodic Natural Textures:** Highly repetitive textures (fences, brick walls, window grids) can cause keypoint clustering; PixelProof employs spatial dispersion and periodic texture filters to minimize false positives.
+- **Format Constraints on ELA:** Lossless formats (PNG, WebP) do not have a prior JPEG compression history; ELA is flagged as `limited` reliability for these formats.
+- **Model Scope:** The EfficientNet-B0 model is trained on CASIA 2.0 splicing and copy-move manipulations, not generative AI (GAN/Diffusion) image synthesis.
 
 ---
 
 ## License
 
-MIT License. Developed for Problem Statement #22 — Image Authenticity Checker.
+MIT License. Copyright (c) 2026 Prince94-p.

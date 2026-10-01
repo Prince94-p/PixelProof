@@ -12,22 +12,22 @@
   },
   "exact_copied_patch": {
     "status": "Low Suspicion",
-    "score": 25,
-    "copy_move_score": 22,
+    "score": 27,
+    "copy_move_score": 24,
     "candidate_matches": 2880,
     "verified_matches": 719,
     "coherent_clusters": 31,
     "dominant_cluster_size": 351,
-    "geometric_cluster_evidence": "Dominant cluster contains 351 verified pairs with mean displacement vector (379.8px, 0.1px) across distance 379.8px."
+    "geometric_cluster_evidence": "Dominant cluster contains 351 verified pairs with mean displacement vector (379.8px, 0.1px) across distance 379.8px.; RANSAC geometric verification confirmed affine correspondence with 314 inliers (rotation: 0.1\u00b0, scale: 1.00x)."
   },
   "textured_copied_patch": {
     "status": "Review Recommended",
-    "score": 35,
-    "copy_move_score": 22,
+    "score": 37,
+    "copy_move_score": 24,
     "candidate_matches": 9528,
     "verified_matches": 1133,
     "coherent_clusters": 34,
-    "geometric_cluster_evidence": "Dominant cluster contains 857 verified pairs with mean displacement vector (399.8px, 160.1px) across distance 430.7px."
+    "geometric_cluster_evidence": "Dominant cluster contains 857 verified pairs with mean displacement vector (399.8px, 160.1px) across distance 430.7px.; RANSAC geometric verification confirmed affine correspondence with 800 inliers (rotation: -0.0\u00b0, scale: 1.00x)."
   },
   "repeated_natural_texture": {
     "status": "Low Suspicion",
@@ -57,7 +57,7 @@
   },
   "localized_spliced_image": {
     "status": "Review Recommended",
-    "score": 49,
+    "score": 51,
     "ela_score": 12,
     "ela_status": "MODERATE VARIATION",
     "noise_score": 15,

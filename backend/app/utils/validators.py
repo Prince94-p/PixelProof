@@ -11,8 +11,13 @@ ALLOWED_MIME_TYPES = {
 
 ALLOWED_EXTENSIONS = {"jpg", "jpeg", "png", "webp"}
 MAX_FILE_SIZE = 25 * 1024 * 1024  # 25 MB
+MAX_FILE_SIZE_BYTES = MAX_FILE_SIZE
 MIN_DIMENSION = 32
 MAX_DIMENSION = 10000
+
+# Protect against decompression bombs
+MAX_TOTAL_PIXELS = 50_000_000  # 50 MP maximum safe decoding ceiling
+Image.MAX_IMAGE_PIXELS = 100_000_000
 
 def sanitize_filename(filename: str) -> str:
     """Removes unsafe characters and returns a clean basename."""
@@ -29,6 +34,7 @@ def validate_image_file(file_bytes: bytes, filename: str, content_type: str = No
     - Header inspection
     - Pillow decode check
     - Dimension check
+    - Decompression bomb safety
     Returns: (is_valid, error_message, file_info)
     """
     size = len(file_bytes)
@@ -67,9 +73,15 @@ def validate_image_file(file_bytes: bytes, filename: str, content_type: str = No
             if width > MAX_DIMENSION or height > MAX_DIMENSION:
                 return False, f"Image dimensions ({width}x{height}) exceed maximum allowed dimension of {MAX_DIMENSION}px.", {}
 
+            total_pixels = width * height
+            if total_pixels > MAX_TOTAL_PIXELS:
+                return False, f"Image pixel count ({total_pixels:,} px) exceeds maximum safe processing ceiling of {MAX_TOTAL_PIXELS:,} px.", {}
+
             # Verify entire image data can be parsed
             img.verify()
             
+    except Image.DecompressionBombError as e:
+        return False, f"Decompression bomb detected. Image resolution exceeds safe decoding memory limits: {str(e)}", {}
     except Exception as e:
         return False, f"Corrupted or invalid image file. Could not decode structure: {str(e)}", {}
 
